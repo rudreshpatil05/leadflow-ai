@@ -1,3 +1,4 @@
+
 from backend.app.schemas.qualification import LeadRequirements
 from backend.app.schemas.qualification_result import QualificationResult
 
