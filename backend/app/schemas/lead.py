@@ -1,62 +1,20 @@
-from datetime import datetime
-
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field
 
 
 class LeadCreate(BaseModel):
-    name: str | None = Field(
-        default=None,
-        max_length=150,
-    )
-
-    phone: str = Field(
-        min_length=7,
-        max_length=30,
-    )
-
+    name: str | None = None
+    phone: str = Field(..., min_length=10, max_length=30)
     email: EmailStr | None = None
-
-    source: str | None = Field(
-        default=None,
-        max_length=50,
-    )
+    source: str | None = None
+    message: str | None = None
 
 
 class LeadUpdate(BaseModel):
-    name: str | None = Field(
-        default=None,
-        max_length=150,
-    )
-
-    phone: str | None = Field(
-        default=None,
-        min_length=7,
-        max_length=30,
-    )
-
+    name: str | None = None
     email: EmailStr | None = None
-
-    source: str | None = Field(
-        default=None,
-        max_length=50,
-    )
-
-    status: str | None = Field(
-        default=None,
-        max_length=30,
-    )
-
-    temperature: str | None = Field(
-        default=None,
-        max_length=30,
-    )
-
-    score: int | None = Field(
-        default=None,
-        ge=0,
-        le=100,
-    )
-
+    source: str | None = None
+    status: str | None = None
+    temperature: str | None = None
     notes: str | None = None
 
 
@@ -70,9 +28,6 @@ class LeadResponse(BaseModel):
     temperature: str | None
     score: int
     notes: str | None
-    created_at: datetime
-    updated_at: datetime
 
-    model_config = ConfigDict(
-        from_attributes=True,
-    )
+    class Config:
+        from_attributes = True
