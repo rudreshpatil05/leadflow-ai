@@ -1,25 +1,18 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
-class QualificationResult(BaseModel):
-    score: int = Field(
-        ge=0,
-        le=100,
-        description="Lead qualification score from 0 to 100."
-    )
+class QualificationResponse(BaseModel):
 
-    temperature: str = Field(
-        description="HOT, WARM, COLD, or NOT QUALIFIED."
-    )
+    lead_id: int
 
-    missing_fields: list[str] = Field(
-        default_factory=list
-    )
+    score: int
 
-    next_question: str | None = None
+    temperature: str
+
+    intent: str | None
 
     next_best_action: str
 
-    reasoning: list[str] = Field(
-        default_factory=list
-    )
+    reasons: list[str]
+
+    requirements: dict
