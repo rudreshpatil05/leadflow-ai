@@ -1,6 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
+from math import ceil
 
+from fastapi import Query
+
+from backend.app.services.lead_service import get_leads
 from backend.app.db.database import get_db
 from backend.app.schemas.lead import (
     LeadCreate,
@@ -112,3 +116,32 @@ def delete_existing_lead(
     delete_lead(db, lead)
 
     return None
+@router.get("/")
+def list_leads(
+    db: Session = Depends(get_db),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    search: str | None = Query(None),
+    temperature: str | None = Query(None),
+    status: str | None = Query(None),
+    source: str | None = Query(None),
+):
+    leads, total = get_leads(
+        db=db,
+        page=page,
+        page_size=page_size,
+        search=search,
+        temperature=temperature,
+        status=status,
+        source=source,
+    )
+
+    total_pages = ceil(total / page_size) if total else 0
+
+    return {
+        "items": leads,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": total_pages,
+    }
