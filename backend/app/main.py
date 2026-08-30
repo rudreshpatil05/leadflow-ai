@@ -1,9 +1,9 @@
 from fastapi import FastAPI
 from sqlalchemy import text
-
+from backend.app.api.v1.activities import router as activities_router
 from backend.app.api.v1.leads import router as leads_router
 from backend.app.db.database import engine
-
+from backend.app.api.v1.activities import router as activities_router
 
 app = FastAPI(
     title="LeadFlow AI",
