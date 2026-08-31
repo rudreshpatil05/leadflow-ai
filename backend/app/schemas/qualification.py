@@ -63,3 +63,11 @@ class LeadRequirements(BaseModel):
         default=None,
         description="Estimated buying intent."
     )
+
+class LeadQualificationRequest(BaseModel):
+    lead_id: int
+    message: str = Field(
+        ...,
+        min_length=1,
+        description="Customer's message containing their property requirements."
+    )
