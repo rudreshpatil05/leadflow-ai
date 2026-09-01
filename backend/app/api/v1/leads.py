@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from math import ceil
-
+from backend.app.schemas.qualification import LeadQualificationRequest
 from fastapi import Query
 
+from backend.app.services.lead_qualification_service import qualify_and_save_lead
 from backend.app.services.lead_service import get_leads
 from backend.app.db.database import get_db
 from backend.app.schemas.lead import (
@@ -26,17 +27,17 @@ router = APIRouter(
 )
 
 
-@router.post(
-    "",
-    response_model=LeadResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-def create_new_lead(
-    lead_data: LeadCreate,
-    db: Session = Depends(get_db),
+@router.post("/{lead_id}/qualify")
+def qualify_lead(
+    lead_id: int,
+    request: LeadQualificationRequest,
+    db: Session = Depends(get_db)
 ):
-    return create_lead(db, lead_data)
-
+    return qualify_and_save_lead(
+        db=db,
+        lead_id=lead_id,
+        message=request.message
+    )
 
 @router.get(
     "",
@@ -145,3 +146,17 @@ def list_leads(
         "page_size": page_size,
         "total_pages": total_pages,
     }
+
+@router.post("/qualify")
+def qualify_lead(
+    payload: LeadQualificationRequest,
+    db: Session = Depends(get_db)
+):
+    return qualify_and_save_lead(
+        db=db,
+        name=payload.name,
+        phone=payload.phone,
+        email=payload.email,
+        source=payload.source,
+        message=payload.message,
+    )
