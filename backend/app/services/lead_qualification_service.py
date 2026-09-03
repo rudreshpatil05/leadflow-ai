@@ -30,6 +30,19 @@ def qualify_and_save_lead(
 
     # Step 4: Store AI intent
     lead.intent = requirements.intent
+    # Step 5: Store extracted requirements
+    lead.property_type = requirements.property_type
+    lead.configuration = requirements.configuration
+    lead.location = requirements.location
+
+    lead.budget_min = requirements.budget.min_amount
+    lead.budget_max = requirements.budget.max_amount
+    lead.currency = requirements.budget.currency
+
+    lead.timeline = requirements.timeline
+    lead.purpose = requirements.purpose
+    lead.down_payment = requirements.down_payment
+    lead.financing_required = requirements.financing_required
 
     # Step 5: Store explanation
     lead.qualification_reasons = json.dumps(
