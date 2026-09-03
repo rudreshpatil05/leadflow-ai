@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from math import ceil
 from backend.app.schemas.qualification import LeadQualificationRequest
 from fastapi import Query
-
+from backend.app.models.lead import Lead
 from backend.app.services.lead_qualification_service import qualify_and_save_lead
 from backend.app.services.lead_service import get_leads
 from backend.app.db.database import get_db
@@ -152,11 +152,16 @@ def qualify_lead(
     payload: LeadQualificationRequest,
     db: Session = Depends(get_db)
 ):
+    lead = db.query(Lead).filter(Lead.id == payload.lead_id).first()
+
+    if not lead:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Lead with id {payload.lead_id} not found"
+        )
+
     return qualify_and_save_lead(
         db=db,
-        name=payload.name,
-        phone=payload.phone,
-        email=payload.email,
-        source=payload.source,
+        lead=lead,
         message=payload.message,
     )
