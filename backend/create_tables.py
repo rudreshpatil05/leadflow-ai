@@ -1,5 +1,9 @@
 from backend.app.db.database import Base, engine
-from backend.app.models import Lead, LeadActivity
+
+# Import all models so SQLAlchemy knows about them
+from backend.app.models.lead import Lead
+from backend.app.models.lead_activity import LeadActivity
+from backend.app.models.follow_up import FollowUp
 
 
 Base.metadata.create_all(bind=engine)
