@@ -1,7 +1,7 @@
 import json
 
 from sqlalchemy.orm import Session
-
+from backend.app.services.follow_up_service import create_follow_up
 from backend.app.ai.extraction import extract_lead_requirements
 from backend.app.services.qualification_scoring import calculate_score
 from backend.app.models.lead import Lead
@@ -77,6 +77,10 @@ def qualify_and_save_lead(
     db.add(activity)
     db.commit()
     db.refresh(activity)
+    follow_up = create_follow_up(
+    db=db,
+    lead=lead,
+)
 
     # Step 11: Return complete result
     return {
