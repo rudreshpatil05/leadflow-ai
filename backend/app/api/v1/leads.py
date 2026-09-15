@@ -21,6 +21,7 @@ from backend.app.services.lead_service import (
 from backend.app.services.lead_qualification_service import (
     qualify_and_save_lead,
 )
+from backend.app.services.sales_copilot_service import generate_sales_copilot
 
 
 router = APIRouter(
@@ -191,3 +192,18 @@ def delete_existing_lead(
         )
 
     return None
+
+@router.get("/{lead_id}/sales-copilot")
+def get_sales_copilot(
+    lead_id: int,
+    db: Session = Depends(get_db),
+):
+    lead = get_lead(db=db, lead_id=lead_id)
+
+    if lead is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Lead not found"
+        )
+
+    return generate_sales_copilot(lead)

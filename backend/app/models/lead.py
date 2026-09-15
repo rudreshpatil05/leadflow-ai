@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import String, Text, Integer, DateTime
+from sqlalchemy import String, Text, Integer, DateTime, Float, Boolean
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.app.db.database import Base
@@ -60,6 +60,61 @@ class Lead(Base):
         Text,
         nullable=True
     )
+
+    # AI-extracted property requirements
+
+    property_type: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True
+    )
+
+    configuration: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True
+    )
+
+    location: Mapped[str | None] = mapped_column(
+        String(150),
+        nullable=True
+    )
+
+    budget_min: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True
+    )
+
+    budget_max: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True
+    )
+
+    currency: Mapped[str | None] = mapped_column(
+        String(10),
+        nullable=True,
+        default="INR"
+    )
+
+    timeline: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True
+    )
+
+    purpose: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True
+    )
+
+    down_payment: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True
+    )
+
+    financing_required: Mapped[bool | None] = mapped_column(
+        Boolean,
+        nullable=True
+    )
+
+    # AI qualification
 
     qualification_reasons: Mapped[str | None] = mapped_column(
         Text,

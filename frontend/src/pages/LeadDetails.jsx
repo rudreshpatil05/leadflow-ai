@@ -1,21 +1,60 @@
-
 import { useEffect, useState } from "react"
-import { useParams } from "react-router-dom"
+import { useParams, useNavigate } from "react-router-dom"
+import {
+  ArrowLeft,
+  RefreshCw,
+  Sparkles,
+  Copy,
+  Check,
+  MessageCircle,
+} from "lucide-react"
+
 import {
   getLead,
   getLeadActivities,
   getLeadFollowUps,
   getLeadNextAction,
+  getSalesCopilot,
 } from "../services/api"
+
 
 function LeadDetails() {
   const { id } = useParams()
+  const navigate = useNavigate()
 
   const [lead, setLead] = useState(null)
   const [activities, setActivities] = useState([])
   const [followUps, setFollowUps] = useState([])
   const [nextAction, setNextAction] = useState(null)
 
+  const [copilot, setCopilot] = useState(null)
+  const [copilotLoading, setCopilotLoading] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  /*
+   * Load AI Sales Copilot
+   */
+  const loadSalesCopilot = async () => {
+    if (!id) return
+
+    try {
+      setCopilotLoading(true)
+
+      const data = await getSalesCopilot(id)
+
+      setCopilot(data)
+    } catch (error) {
+      console.error("Failed to load Sales Copilot:", error)
+      setCopilot(null)
+    } finally {
+      setCopilotLoading(false)
+    }
+  }
+
+
+  /*
+   * Load lead details
+   */
   useEffect(() => {
     const loadLeadDetails = async () => {
       try {
@@ -35,224 +74,665 @@ function LeadDetails() {
         setActivities(activitiesData)
         setFollowUps(followUpsData)
         setNextAction(nextActionData)
+
       } catch (error) {
         console.error("Failed to load lead details:", error)
       }
     }
 
-    loadLeadDetails()
+    if (id) {
+      loadLeadDetails()
+      loadSalesCopilot()
+    }
   }, [id])
 
-  if (!lead) {
-    return <div className="p-8">Loading lead...</div>
+
+  /*
+   * Copy WhatsApp message
+   */
+  const copyWhatsAppMessage = async () => {
+    if (!copilot?.whatsapp_message) return
+
+    try {
+      await navigator.clipboard.writeText(
+        copilot.whatsapp_message
+      )
+
+      setCopied(true)
+
+      setTimeout(() => {
+        setCopied(false)
+      }, 2000)
+
+    } catch (error) {
+      console.error("Failed to copy WhatsApp message:", error)
+    }
   }
+
+
+  /*
+   * Loading state
+   */
+  if (!lead) {
+    return (
+      <div className="min-h-screen bg-slate-50 p-8">
+        <div className="mx-auto max-w-7xl">
+          <p className="text-slate-500">
+            Loading lead...
+          </p>
+        </div>
+      </div>
+    )
+  }
+
 
   return (
     <div className="min-h-screen bg-slate-50">
 
       {/* Header */}
       <header className="border-b bg-white px-8 py-5">
-        <h1 className="text-2xl font-bold text-slate-900">
-          {lead.name}
-        </h1>
+        <div className="mx-auto max-w-7xl">
 
-        <p className="text-sm text-slate-500">
-          Lead #{lead.id}
-        </p>
-      </header>
+          <button
+            onClick={() => navigate(-1)}
+            className="mb-4 flex items-center gap-2 text-sm font-medium text-slate-500 transition hover:text-slate-900"
+          >
+            <ArrowLeft size={17} />
+            Back
+          </button>
 
-      <main className="grid gap-6 p-8 lg:grid-cols-3">
+          <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
 
-        {/* Lead Information */}
-        <div className="rounded-xl bg-white p-6 shadow-sm">
-          <h2 className="mb-4 text-lg font-semibold">
-            Lead Information
-          </h2>
-
-          <div className="space-y-3 text-sm">
-            <p>
-              <strong>Phone:</strong> {lead.phone || "-"}
-            </p>
-
-            <p>
-              <strong>Email:</strong> {lead.email || "-"}
-            </p>
-
-            <p>
-              <strong>Source:</strong> {lead.source || "-"}
-            </p>
-
-            <p>
-              <strong>Score:</strong> {lead.score ?? "-"}
-            </p>
-
-            <p>
-              <strong>Temperature:</strong>{" "}
-              {lead.temperature || "-"}
-            </p>
-          </div>
-        </div>
-
-        {/* Property Requirements */}
-        <div className="rounded-xl bg-white p-6 shadow-sm">
-          <h2 className="mb-4 text-lg font-semibold">
-            Property Requirements
-          </h2>
-
-          <div className="space-y-3 text-sm">
-            <p>
-              <strong>Property:</strong>{" "}
-              {lead.property_type || "-"}
-            </p>
-
-            <p>
-              <strong>Configuration:</strong>{" "}
-              {lead.configuration || "-"}
-            </p>
-
-            <p>
-              <strong>Location:</strong>{" "}
-              {lead.location || "-"}
-            </p>
-
-            <p>
-              <strong>Budget:</strong>{" "}
-              {lead.budget_max
-                ? `₹${lead.budget_max.toLocaleString()}`
-                : "-"}
-            </p>
-
-            <p>
-              <strong>Timeline:</strong>{" "}
-              {lead.timeline || "-"}
-            </p>
-
-            <p>
-              <strong>Purpose:</strong>{" "}
-              {lead.purpose || "-"}
-            </p>
-          </div>
-        </div>
-
-        {/* Next Best Action */}
-        <div className="rounded-xl bg-white p-6 shadow-sm">
-          <h2 className="mb-4 text-lg font-semibold">
-            Next Best Action
-          </h2>
-
-          {nextAction ? (
-            <div className="space-y-3">
-
-              <p>
-                <strong>Priority:</strong>{" "}
-                {nextAction.priority}
-              </p>
-
-              <p>
-                <strong>Action:</strong>{" "}
-                {nextAction.action}
-              </p>
-
-              <p>
-                <strong>Channel:</strong>{" "}
-                {nextAction.channel}
-              </p>
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900">
+                {lead.name || "Unnamed Lead"}
+              </h1>
 
               <p className="text-sm text-slate-500">
-                {nextAction.reason}
+                Lead #{lead.id}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3">
+
+              <span className="rounded-full bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-700">
+                {lead.status || "NEW"}
+              </span>
+
+              {lead.temperature && (
+                <span
+                  className={`rounded-full px-3 py-1.5 text-sm font-semibold ${
+                    lead.temperature === "HOT"
+                      ? "bg-red-100 text-red-700"
+                      : lead.temperature === "WARM"
+                        ? "bg-orange-100 text-orange-700"
+                        : "bg-blue-100 text-blue-700"
+                  }`}
+                >
+                  {lead.temperature}
+                </span>
+              )}
+
+            </div>
+
+          </div>
+
+        </div>
+      </header>
+
+
+      <main className="mx-auto max-w-7xl space-y-6 p-8">
+
+
+        {/* Top Information Cards */}
+        <div className="grid gap-6 lg:grid-cols-3">
+
+
+          {/* Lead Information */}
+          <div className="rounded-xl bg-white p-6 shadow-sm">
+
+            <h2 className="mb-4 text-lg font-semibold text-slate-900">
+              Lead Information
+            </h2>
+
+            <div className="space-y-3 text-sm">
+
+              <p>
+                <strong>Phone:</strong>{" "}
+                {lead.phone || "-"}
+              </p>
+
+              <p>
+                <strong>Email:</strong>{" "}
+                {lead.email || "-"}
+              </p>
+
+              <p>
+                <strong>Source:</strong>{" "}
+                {lead.source || "-"}
+              </p>
+
+              <p>
+                <strong>Score:</strong>{" "}
+                {lead.score ?? "-"}
+              </p>
+
+              <p>
+                <strong>Temperature:</strong>{" "}
+                {lead.temperature || "-"}
+              </p>
+
+              <p>
+                <strong>Intent:</strong>{" "}
+                {lead.intent || "-"}
               </p>
 
             </div>
-          ) : (
-            <p className="text-sm text-slate-500">
-              No pending action.
-            </p>
-          )}
-        </div>
 
-        {/* AI Qualification */}
-        <div className="rounded-xl bg-white p-6 shadow-sm lg:col-span-2">
-          <h2 className="mb-4 text-lg font-semibold">
-            AI Qualification
-          </h2>
+          </div>
 
-          <p className="text-sm text-slate-600">
-            {lead.qualification_reasons ||
-              "No qualification reasons available."}
-          </p>
-        </div>
 
-        {/* Follow Ups */}
-        <div className="rounded-xl bg-white p-6 shadow-sm">
-          <h2 className="mb-4 text-lg font-semibold">
-            Follow-ups
-          </h2>
+          {/* Property Requirements */}
+          <div className="rounded-xl bg-white p-6 shadow-sm">
 
-          <div className="space-y-4">
-            {followUps.length === 0 ? (
-              <p className="text-sm text-slate-500">
-                No follow-ups available.
+            <h2 className="mb-4 text-lg font-semibold text-slate-900">
+              Property Requirements
+            </h2>
+
+            <div className="space-y-3 text-sm">
+
+              <p>
+                <strong>Property:</strong>{" "}
+                {lead.property_type || "-"}
               </p>
-            ) : (
-              followUps.map((followUp) => (
-                <div
-                  key={followUp.id}
-                  className="border-b pb-3"
-                >
-                  <p className="font-medium">
-                    {followUp.action}
+
+              <p>
+                <strong>Configuration:</strong>{" "}
+                {lead.configuration || "-"}
+              </p>
+
+              <p>
+                <strong>Location:</strong>{" "}
+                {lead.location || "-"}
+              </p>
+
+              <p>
+                <strong>Budget:</strong>{" "}
+                {lead.budget_max
+                  ? `₹${Number(
+                      lead.budget_max
+                    ).toLocaleString("en-IN")}`
+                  : "-"}
+              </p>
+
+              <p>
+                <strong>Timeline:</strong>{" "}
+                {lead.timeline || "-"}
+              </p>
+
+              <p>
+                <strong>Purpose:</strong>{" "}
+                {lead.purpose || "-"}
+              </p>
+
+              <p>
+                <strong>Down Payment:</strong>{" "}
+                {lead.down_payment
+                  ? `₹${Number(
+                      lead.down_payment
+                    ).toLocaleString("en-IN")}`
+                  : "-"}
+              </p>
+
+              <p>
+                <strong>Financing:</strong>{" "}
+                {lead.financing_required === null ||
+                lead.financing_required === undefined
+                  ? "-"
+                  : lead.financing_required
+                    ? "Required"
+                    : "Not Required"}
+              </p>
+
+            </div>
+
+          </div>
+
+
+          {/* Next Best Action */}
+          <div className="rounded-xl bg-white p-6 shadow-sm">
+
+            <h2 className="mb-4 text-lg font-semibold text-slate-900">
+              Next Best Action
+            </h2>
+
+            {nextAction ? (
+
+              <div className="space-y-3">
+
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    Priority
                   </p>
 
-                  <p className="text-sm text-slate-500">
-                    {followUp.follow_up_type}
-                  </p>
-
-                  <p className="text-sm">
-                    {followUp.status}
+                  <p className="mt-1 font-semibold text-slate-900">
+                    {nextAction.priority || "-"}
                   </p>
                 </div>
-              ))
+
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    Action
+                  </p>
+
+                  <p className="mt-1 text-sm text-slate-700">
+                    {nextAction.action || "-"}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    Channel
+                  </p>
+
+                  <p className="mt-1 text-sm font-medium text-slate-700">
+                    {nextAction.channel || "-"}
+                  </p>
+                </div>
+
+                {nextAction.reason && (
+                  <p className="border-t pt-3 text-sm leading-6 text-slate-500">
+                    {nextAction.reason}
+                  </p>
+                )}
+
+              </div>
+
+            ) : (
+
+              <p className="text-sm text-slate-500">
+                No pending action.
+              </p>
+
             )}
+
           </div>
+
         </div>
 
+
+        {/* AI Sales Copilot */}
+        <div className="overflow-hidden rounded-2xl border border-violet-200 bg-white shadow-sm">
+
+          {/* Copilot Header */}
+          <div className="bg-gradient-to-r from-violet-600 to-indigo-600 px-6 py-5 text-white">
+
+            <div className="flex items-center justify-between gap-4">
+
+              <div className="flex items-center gap-3">
+
+                <div className="rounded-xl bg-white/20 p-2">
+                  <Sparkles size={22} />
+                </div>
+
+                <div>
+
+                  <h2 className="text-lg font-semibold">
+                    AI Sales Copilot
+                  </h2>
+
+                  <p className="text-sm text-violet-100">
+                    AI-powered guidance for your next sales conversation
+                  </p>
+
+                </div>
+
+              </div>
+
+
+              <button
+                onClick={loadSalesCopilot}
+                disabled={copilotLoading}
+                className="flex items-center gap-2 rounded-lg bg-white/15 px-3 py-2 text-sm font-medium transition hover:bg-white/25 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+
+                <RefreshCw
+                  size={16}
+                  className={
+                    copilotLoading
+                      ? "animate-spin"
+                      : ""
+                  }
+                />
+
+                Refresh AI
+
+              </button>
+
+            </div>
+
+          </div>
+
+
+          {/* Copilot Content */}
+          <div className="p-6">
+
+            {copilotLoading ? (
+
+              <div className="flex items-center justify-center gap-3 py-12 text-slate-500">
+
+                <RefreshCw
+                  size={20}
+                  className="animate-spin"
+                />
+
+                <span>
+                  Generating AI sales recommendations...
+                </span>
+
+              </div>
+
+            ) : copilot ? (
+
+              <div className="space-y-6">
+
+
+                {/* Summary */}
+                <div>
+
+                  <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-400">
+                    Lead Summary
+                  </h3>
+
+                  <p className="leading-7 text-slate-700">
+                    {copilot.summary || "-"}
+                  </p>
+
+                </div>
+
+
+                {/* Priority */}
+                <div>
+
+                  <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-400">
+                    AI Priority
+                  </h3>
+
+                  <span
+                    className={`inline-flex rounded-full px-3 py-1 text-sm font-semibold ${
+                      copilot.priority === "HIGH"
+                        ? "bg-red-100 text-red-700"
+                        : copilot.priority === "MEDIUM"
+                          ? "bg-orange-100 text-orange-700"
+                          : "bg-slate-100 text-slate-700"
+                    }`}
+                  >
+                    {copilot.priority || "NORMAL"}
+                  </span>
+
+                </div>
+
+
+                {/* Talking Points */}
+                <div>
+
+                  <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">
+                    Talking Points
+                  </h3>
+
+                  <div className="grid gap-3 md:grid-cols-3">
+
+                    {copilot.talking_points?.map(
+                      (point, index) => (
+
+                        <div
+                          key={index}
+                          className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                        >
+
+                          <div className="mb-3 flex h-7 w-7 items-center justify-center rounded-full bg-violet-100 text-xs font-bold text-violet-700">
+                            {index + 1}
+                          </div>
+
+                          <p className="text-sm leading-6 text-slate-700">
+                            {point}
+                          </p>
+
+                        </div>
+
+                      )
+                    )}
+
+                  </div>
+
+                </div>
+
+
+                {/* Sales Strategy */}
+                <div>
+
+                  <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-400">
+                    Recommended Sales Strategy
+                  </h3>
+
+                  <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-4">
+
+                    <p className="text-sm leading-6 text-indigo-950">
+                      {copilot.sales_strategy || "-"}
+                    </p>
+
+                  </div>
+
+                </div>
+
+
+                {/* WhatsApp Message */}
+                <div>
+
+                  <div className="mb-3 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+
+                    <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+                      Personalized WhatsApp Message
+                    </h3>
+
+                    <button
+                      onClick={copyWhatsAppMessage}
+                      className="flex items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                    >
+
+                      {copied ? (
+                        <>
+                          <Check size={16} />
+                          Copied
+                        </>
+                      ) : (
+                        <>
+                          <Copy size={16} />
+                          Copy Message
+                        </>
+                      )}
+
+                    </button>
+
+                  </div>
+
+
+                  <div className="rounded-xl border border-green-200 bg-green-50 p-5">
+
+                    <div className="mb-3 flex items-center gap-2 text-green-700">
+
+                      <MessageCircle size={19} />
+
+                      <span className="text-sm font-semibold">
+                        WhatsApp
+                      </span>
+
+                    </div>
+
+                    <p className="whitespace-pre-line text-sm leading-7 text-slate-700">
+                      {copilot.whatsapp_message || "-"}
+                    </p>
+
+                  </div>
+
+                </div>
+
+              </div>
+
+            ) : (
+
+              <div className="py-10 text-center">
+
+                <Sparkles
+                  size={30}
+                  className="mx-auto mb-3 text-slate-300"
+                />
+
+                <p className="text-sm text-slate-500">
+                  Sales Copilot information is unavailable.
+                </p>
+
+                <button
+                  onClick={loadSalesCopilot}
+                  className="mt-4 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-violet-700"
+                >
+                  Generate AI Recommendations
+                </button>
+
+              </div>
+
+            )}
+
+          </div>
+
+        </div>
+
+
+        {/* AI Qualification + Follow Ups */}
+        <div className="grid gap-6 lg:grid-cols-3">
+
+
+          {/* AI Qualification */}
+          <div className="rounded-xl bg-white p-6 shadow-sm lg:col-span-2">
+
+            <h2 className="mb-4 text-lg font-semibold text-slate-900">
+              AI Qualification
+            </h2>
+
+            <p className="whitespace-pre-line text-sm leading-7 text-slate-600">
+              {lead.qualification_reasons ||
+                "No qualification reasons available."}
+            </p>
+
+          </div>
+
+
+          {/* Follow Ups */}
+          <div className="rounded-xl bg-white p-6 shadow-sm">
+
+            <h2 className="mb-4 text-lg font-semibold text-slate-900">
+              Follow-ups
+            </h2>
+
+            <div className="space-y-4">
+
+              {followUps.length === 0 ? (
+
+                <p className="text-sm text-slate-500">
+                  No follow-ups available.
+                </p>
+
+              ) : (
+
+                followUps.map((followUp) => (
+
+                  <div
+                    key={followUp.id}
+                    className="border-b border-slate-100 pb-3 last:border-0"
+                  >
+
+                    <p className="font-medium text-slate-800">
+                      {followUp.action}
+                    </p>
+
+                    <p className="mt-1 text-sm text-slate-500">
+                      {followUp.follow_up_type}
+                    </p>
+
+                    <p className="mt-1 text-xs font-medium text-slate-400">
+                      {followUp.status}
+                    </p>
+
+                  </div>
+
+                ))
+
+              )}
+
+            </div>
+
+          </div>
+
+        </div>
+
+
         {/* Activity Timeline */}
-        <div className="rounded-xl bg-white p-6 shadow-sm lg:col-span-3">
-          <h2 className="mb-4 text-lg font-semibold">
+        <div className="rounded-xl bg-white p-6 shadow-sm">
+
+          <h2 className="mb-6 text-lg font-semibold text-slate-900">
             Activity Timeline
           </h2>
 
-          <div className="space-y-4">
+          <div className="space-y-5">
+
             {activities.length === 0 ? (
+
               <p className="text-sm text-slate-500">
                 No activities available.
               </p>
+
             ) : (
+
               activities.map((activity) => (
+
                 <div
                   key={activity.id}
-                  className="border-l-2 pl-4"
+                  className="flex gap-4"
                 >
-                  <p className="font-medium">
-                    {activity.activity_type}
-                  </p>
 
-                  <p className="text-sm text-slate-600">
-                    {activity.description}
-                  </p>
+                  <div className="mt-1 h-3 w-3 shrink-0 rounded-full bg-violet-500" />
 
-                  <p className="text-xs text-slate-400">
-                    {activity.created_at}
-                  </p>
+                  <div className="flex-1 border-b border-slate-100 pb-4">
+
+                    <p className="font-medium text-slate-800">
+                      {activity.activity_type}
+                    </p>
+
+                    <p className="mt-1 text-sm leading-6 text-slate-600">
+                      {activity.description}
+                    </p>
+
+                    <p className="mt-2 text-xs text-slate-400">
+                      {activity.created_at}
+                    </p>
+
+                  </div>
+
                 </div>
+
               ))
+
             )}
+
           </div>
+
         </div>
 
       </main>
+
     </div>
   )
 }
+
 
 export default LeadDetails

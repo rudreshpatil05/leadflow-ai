@@ -95,12 +95,13 @@ export const getLeadFollowUps = async (leadId) => {
 // ===============================
 
 export const getLeadNextAction = async (leadId) => {
-  const response = await API.get(
-    `/next-actions/lead/${leadId}`
-  )
-
+  const response = await API.get(`/next-actions/lead/${leadId}`)
   return response.data
 }
 
+export const getSalesCopilot = async (leadId) => {
+  const response = await API.get(`/leads/${leadId}/sales-copilot`)
+  return response.data
+}
 
 export default API
