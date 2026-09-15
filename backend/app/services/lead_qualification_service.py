@@ -1,11 +1,13 @@
 import json
 
 from sqlalchemy.orm import Session
-from backend.app.services.follow_up_service import create_follow_up
+
 from backend.app.ai.extraction import extract_lead_requirements
-from backend.app.services.qualification_scoring import calculate_score
 from backend.app.models.lead import Lead
 from backend.app.models.lead_activity import LeadActivity
+from backend.app.services.follow_up_service import create_follow_up
+from backend.app.services.next_best_action_service import create_next_best_action
+from backend.app.services.qualification_scoring import calculate_score
 
 
 def qualify_and_save_lead(
@@ -14,10 +16,15 @@ def qualify_and_save_lead(
     message: str,
 ):
     """
-    Extract customer requirements using AI,
-    calculate qualification score,
-    save the result to the lead,
-    and create an activity record.
+    Complete AI lead qualification pipeline.
+
+    1. Extract customer requirements using AI
+    2. Calculate qualification score
+    3. Save qualification data to lead
+    4. Create activity
+    5. Create follow-up
+    6. Create next best action
+    7. Return complete result
     """
 
     # Step 1: Extract structured requirements using AI
@@ -26,43 +33,38 @@ def qualify_and_save_lead(
     # Step 2: Calculate qualification score
     qualification = calculate_score(requirements)
 
-    # Step 3: Update lead with qualification score
+    # Step 3: Update lead qualification
     lead.score = qualification.score
     lead.temperature = qualification.temperature
-
-    # Step 4: Store AI intent
     lead.intent = requirements.intent
 
-    # Step 5: Store extracted requirements
+    # Step 4: Store extracted requirements
     lead.property_type = requirements.property_type
     lead.configuration = requirements.configuration
     lead.location = requirements.location
 
-    # Budget
     lead.budget_min = requirements.budget.min_amount
     lead.budget_max = requirements.budget.max_amount
     lead.currency = requirements.budget.currency
 
-    # Other requirements
     lead.timeline = requirements.timeline
     lead.purpose = requirements.purpose
     lead.down_payment = requirements.down_payment
     lead.financing_required = requirements.financing_required
 
-    # Step 6: Store qualification reasons
+    # Step 5: Store qualification information
     lead.qualification_reasons = json.dumps(
         qualification.reasons
     )
 
-    # Step 7: Store next best action
     lead.next_best_action = qualification.next_best_action
 
-    # Step 8: Save updated lead
+    # Step 6: Save updated lead
     db.add(lead)
     db.commit()
     db.refresh(lead)
 
-    # Step 9: Automatically create activity
+    # Step 7: Create activity
     activity = LeadActivity(
         lead_id=lead.id,
         activity_type="AI_QUALIFICATION",
@@ -73,19 +75,28 @@ def qualify_and_save_lead(
         ),
     )
 
-    # Step 10: Save activity
     db.add(activity)
     db.commit()
     db.refresh(activity)
-    follow_up = create_follow_up(
-    db=db,
-    lead=lead,
-)
 
-    # Step 11: Return complete result
+    # Step 8: Create follow-up
+    follow_up = create_follow_up(
+        db=db,
+        lead=lead,
+    )
+
+    # Step 9: Create next best action
+    next_best_action = create_next_best_action(
+        db=db,
+        lead=lead,
+    )
+
+    # Step 10: Return complete result
     return {
         "lead": lead,
         "requirements": requirements,
         "qualification": qualification,
         "activity": activity,
+        "follow_up": follow_up,
+        "next_best_action": next_best_action,
     }

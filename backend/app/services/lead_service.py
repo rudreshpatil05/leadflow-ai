@@ -1,7 +1,8 @@
-from sqlalchemy import select, func, or_
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 
 from backend.app.models.lead import Lead
+from backend.app.models.lead_activity import LeadActivity
 from backend.app.schemas.lead import LeadCreate, LeadUpdate
 
 
@@ -9,9 +10,11 @@ def create_lead(
     db: Session,
     lead_data: LeadCreate,
 ) -> Lead:
-
     lead = Lead(
-        **lead_data.model_dump()
+        name=lead_data.name,
+        phone=lead_data.phone,
+        email=lead_data.email,
+        source=lead_data.source,
     )
 
     db.add(lead)
@@ -24,9 +27,12 @@ def create_lead(
 def get_lead(
     db: Session,
     lead_id: int,
-) -> Lead | None:
-
-    return db.get(Lead, lead_id)
+):
+    return (
+        db.query(Lead)
+        .filter(Lead.id == lead_id)
+        .first()
+    )
 
 
 def get_leads(
@@ -37,116 +43,46 @@ def get_leads(
     temperature: str | None = None,
     status: str | None = None,
     source: str | None = None,
-    sort_by: str = "created_at",
-    sort_order: str = "desc",
 ):
-    """
-    Retrieve leads with search, filtering,
-    sorting and pagination.
-    """
-
-    query = select(Lead)
-
-    # -------------------------
-    # SEARCH
-    # -------------------------
+    query = db.query(Lead)
 
     if search:
+        search_term = f"%{search}%"
 
-        pattern = f"%{search}%"
-
-        query = query.where(
+        query = query.filter(
             or_(
-                Lead.name.like(pattern),
-                Lead.phone.like(pattern),
-                Lead.email.like(pattern),
+                Lead.name.ilike(search_term),
+                Lead.phone.ilike(search_term),
+                Lead.email.ilike(search_term),
+                Lead.location.ilike(search_term),
+                Lead.configuration.ilike(search_term),
             )
         )
 
-    # -------------------------
-    # TEMPERATURE
-    # -------------------------
-
     if temperature:
-
-        query = query.where(
+        query = query.filter(
             Lead.temperature == temperature
         )
 
-    # -------------------------
-    # STATUS
-    # -------------------------
-
     if status:
-
-        query = query.where(
+        query = query.filter(
             Lead.status == status
         )
 
-    # -------------------------
-    # SOURCE
-    # -------------------------
-
     if source:
-
-        query = query.where(
+        query = query.filter(
             Lead.source == source
         )
 
-    # -------------------------
-    # COUNT
-    # -------------------------
+    total = query.count()
 
-    count_query = select(
-        func.count()
-    ).select_from(
-        query.subquery()
-    )
-
-    total = db.scalar(count_query) or 0
-
-    # -------------------------
-    # SORTING
-    # -------------------------
-
-    allowed_sort_fields = {
-        "created_at": Lead.created_at,
-        "score": Lead.score,
-        "name": Lead.name,
-        "temperature": Lead.temperature,
-        "status": Lead.status,
-    }
-
-    sort_column = allowed_sort_fields.get(
-        sort_by,
-        Lead.created_at,
-    )
-
-    if sort_order.lower() == "asc":
-
-        query = query.order_by(
-            sort_column.asc()
-        )
-
-    else:
-
-        query = query.order_by(
-            sort_column.desc()
-        )
-
-    # -------------------------
-    # PAGINATION
-    # -------------------------
-
-    offset = (page - 1) * page_size
-
-    query = (
+    leads = (
         query
-        .offset(offset)
+        .order_by(Lead.created_at.desc())
+        .offset((page - 1) * page_size)
         .limit(page_size)
+        .all()
     )
-
-    leads = db.scalars(query).all()
 
     return leads, total
 
@@ -155,30 +91,48 @@ def update_lead(
     db: Session,
     lead_id: int,
     lead_data: LeadUpdate,
-) -> Lead | None:
-
-    lead = db.get(
-        Lead,
-        lead_id
+):
+    lead = get_lead(
+        db=db,
+        lead_id=lead_id,
     )
 
-    if not lead:
+    if lead is None:
         return None
+
+    old_status = lead.status
 
     update_data = lead_data.model_dump(
         exclude_unset=True
     )
 
     for field, value in update_data.items():
-
-        setattr(
-            lead,
-            field,
-            value
-        )
+        setattr(lead, field, value)
 
     db.commit()
     db.refresh(lead)
+
+    new_status = lead.status
+
+    # Record status changes
+    if (
+        "status" in update_data
+        and old_status != new_status
+    ):
+        activity = LeadActivity(
+            lead_id=lead.id,
+            activity_type="STATUS_CHANGED",
+            description=(
+                f"Lead moved from "
+                f"{old_status or 'NEW'} "
+                f"to "
+                f"{new_status}."
+            ),
+        )
+
+        db.add(activity)
+        db.commit()
+        db.refresh(activity)
 
     return lead
 
@@ -186,14 +140,13 @@ def update_lead(
 def delete_lead(
     db: Session,
     lead_id: int,
-) -> bool:
-
-    lead = db.get(
-        Lead,
-        lead_id
+):
+    lead = get_lead(
+        db=db,
+        lead_id=lead_id,
     )
 
-    if not lead:
+    if lead is None:
         return False
 
     db.delete(lead)

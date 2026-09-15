@@ -1,23 +1,25 @@
+from math import ceil
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
-from math import ceil
-from backend.app.schemas.qualification import LeadQualificationRequest
-from fastapi import Query
-from backend.app.models.lead import Lead
-from backend.app.services.lead_qualification_service import qualify_and_save_lead
-from backend.app.services.lead_service import get_leads
+
 from backend.app.db.database import get_db
+from backend.app.models.lead import Lead
 from backend.app.schemas.lead import (
     LeadCreate,
     LeadResponse,
     LeadUpdate,
 )
+from backend.app.schemas.qualification import LeadQualificationRequest
 from backend.app.services.lead_service import (
     create_lead,
     delete_lead,
     get_lead,
     get_leads,
     update_lead,
+)
+from backend.app.services.lead_qualification_service import (
+    qualify_and_save_lead,
 )
 
 
@@ -27,96 +29,29 @@ router = APIRouter(
 )
 
 
-@router.post("/{lead_id}/qualify")
-def qualify_lead(
-    lead_id: int,
-    request: LeadQualificationRequest,
-    db: Session = Depends(get_db)
+# =========================================================
+# CREATE LEAD
+# =========================================================
+
+@router.post(
+    "/",
+    response_model=LeadResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_new_lead(
+    lead_data: LeadCreate,
+    db: Session = Depends(get_db),
 ):
-    return qualify_and_save_lead(
+    return create_lead(
         db=db,
-        lead_id=lead_id,
-        message=request.message
-    )
-
-@router.get(
-    "",
-    response_model=list[LeadResponse],
-)
-def list_all_leads(
-    skip: int = Query(default=0, ge=0),
-    limit: int = Query(default=50, ge=1, le=100),
-    db: Session = Depends(get_db),
-):
-    return get_leads(
-        db,
-        skip=skip,
-        limit=limit,
+        lead_data=lead_data,
     )
 
 
-@router.get(
-    "/{lead_id}",
-    response_model=LeadResponse,
-)
-def get_single_lead(
-    lead_id: int,
-    db: Session = Depends(get_db),
-):
-    lead = get_lead(db, lead_id)
+# =========================================================
+# GET ALL LEADS
+# =========================================================
 
-    if lead is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Lead not found",
-        )
-
-    return lead
-
-
-@router.patch(
-    "/{lead_id}",
-    response_model=LeadResponse,
-)
-def update_existing_lead(
-    lead_id: int,
-    lead_data: LeadUpdate,
-    db: Session = Depends(get_db),
-):
-    lead = get_lead(db, lead_id)
-
-    if lead is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Lead not found",
-        )
-
-    return update_lead(
-        db,
-        lead,
-        lead_data,
-    )
-
-
-@router.delete(
-    "/{lead_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-)
-def delete_existing_lead(
-    lead_id: int,
-    db: Session = Depends(get_db),
-):
-    lead = get_lead(db, lead_id)
-
-    if lead is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Lead not found",
-        )
-
-    delete_lead(db, lead)
-
-    return None
 @router.get("/")
 def list_leads(
     db: Session = Depends(get_db),
@@ -147,21 +82,112 @@ def list_leads(
         "total_pages": total_pages,
     }
 
-@router.post("/qualify")
-def qualify_lead(
-    payload: LeadQualificationRequest,
-    db: Session = Depends(get_db)
-):
-    lead = db.query(Lead).filter(Lead.id == payload.lead_id).first()
 
-    if not lead:
+# =========================================================
+# GET SINGLE LEAD
+# =========================================================
+
+@router.get(
+    "/{lead_id}",
+    response_model=LeadResponse,
+)
+def get_single_lead(
+    lead_id: int,
+    db: Session = Depends(get_db),
+):
+    lead = get_lead(
+        db=db,
+        lead_id=lead_id,
+    )
+
+    if lead is None:
         raise HTTPException(
-            status_code=404,
-            detail=f"Lead with id {payload.lead_id} not found"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Lead not found",
+        )
+
+    return lead
+
+
+# =========================================================
+# QUALIFY LEAD
+# =========================================================
+
+@router.post(
+    "/{lead_id}/qualify",
+)
+def qualify_lead(
+    lead_id: int,
+    request: LeadQualificationRequest,
+    db: Session = Depends(get_db),
+):
+    lead = get_lead(
+        db=db,
+        lead_id=lead_id,
+    )
+
+    if lead is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Lead not found",
         )
 
     return qualify_and_save_lead(
         db=db,
         lead=lead,
-        message=payload.message,
+        message=request.message,
     )
+
+
+# =========================================================
+# UPDATE LEAD
+# =========================================================
+
+@router.patch(
+    "/{lead_id}",
+    response_model=LeadResponse,
+)
+def update_existing_lead(
+    lead_id: int,
+    lead_data: LeadUpdate,
+    db: Session = Depends(get_db),
+):
+    lead = update_lead(
+        db=db,
+        lead_id=lead_id,
+        lead_data=lead_data,
+    )
+
+    if lead is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Lead not found",
+        )
+
+    return lead
+
+
+# =========================================================
+# DELETE LEAD
+# =========================================================
+
+@router.delete(
+    "/{lead_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_existing_lead(
+    lead_id: int,
+    db: Session = Depends(get_db),
+):
+    deleted = delete_lead(
+        db=db,
+        lead_id=lead_id,
+    )
+
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Lead not found",
+        )
+
+    return None

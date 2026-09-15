@@ -29,5 +29,21 @@ class LeadResponse(BaseModel):
     score: int
     notes: str | None
 
+    # AI qualification
+    property_type: str | None
+    configuration: str | None
+    location: str | None
+    budget_min: float | None
+    budget_max: float | None
+    currency: str | None
+    timeline: str | None
+    purpose: str | None
+    down_payment: float | None
+    financing_required: bool | None
+
+    intent: str | None
+    qualification_reasons: str | None
+    next_best_action: str | None
+
     class Config:
         from_attributes = True

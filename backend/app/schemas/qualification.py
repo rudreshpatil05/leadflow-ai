@@ -2,8 +2,11 @@ from pydantic import BaseModel, Field
 
 
 class LeadQualificationRequest(BaseModel):
-    lead_id: int
-    message: str
+    message: str = Field(
+        ...,
+        min_length=1,
+        description="Customer message used for AI lead qualification."
+    )
 
 
 class Budget(BaseModel):

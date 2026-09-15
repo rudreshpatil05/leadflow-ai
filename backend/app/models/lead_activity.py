@@ -37,3 +37,4 @@ class LeadActivity(Base):
         default=datetime.utcnow,
         nullable=False,
     )
+    
