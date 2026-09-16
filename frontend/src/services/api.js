@@ -124,5 +124,11 @@ export const generateLeadMessage = async (leadId, messageType) => {
 
   return response.data
 }
+export const completeFollowUp = async (followUpId) => {
+  const response = await API.patch(
+    `/follow-ups/${followUpId}/complete`
+  )
+  return response.data
+}
 
 export default API
