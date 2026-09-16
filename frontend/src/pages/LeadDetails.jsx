@@ -12,11 +12,13 @@ import {
 
 import {
   getLead,
+  qualifyLead,
   getLeadActivities,
   getLeadFollowUps,
   getLeadNextAction,
   getSalesCopilot,
   generateLeadMessage,
+  getWhatsAppUrl,
 } from "../services/api"
 
 
@@ -92,7 +94,20 @@ function LeadDetails() {
       setCopilotLoading(false)
     }
   }
+  const openWhatsApp = (message = "") => {
+  if (!lead?.phone) return
 
+  const whatsappUrl = getWhatsAppUrl(
+    lead.phone,
+    message
+  )
+
+  window.open(
+    whatsappUrl,
+    "_blank",
+    "noopener,noreferrer"
+  )
+}
 
   /*
    * Generate AI Message

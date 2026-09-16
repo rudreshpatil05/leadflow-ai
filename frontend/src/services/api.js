@@ -130,5 +130,16 @@ export const completeFollowUp = async (followUpId) => {
   )
   return response.data
 }
+export const getWhatsAppUrl = (phone, message = "") => {
+  const cleanPhone = String(phone || "").replace(/\D/g, "")
 
+  const normalizedPhone =
+    cleanPhone.length === 10
+      ? `91${cleanPhone}`
+      : cleanPhone
+
+  const encodedMessage = encodeURIComponent(message)
+
+  return `https://wa.me/${normalizedPhone}?text=${encodedMessage}`
+}
 export default API
