@@ -13,6 +13,10 @@ export const getDashboardStats = async () => {
   const response = await API.get("/dashboard/stats")
   return response.data
 }
+export const getSourceAnalytics = async () => {
+  const response = await API.get("/dashboard/source-analytics")
+  return response.data
+}
 
 
 // ===============================
