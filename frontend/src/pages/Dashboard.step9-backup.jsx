@@ -9,10 +9,10 @@ import {
   Snowflake,
   BarChart3,
 } from "lucide-react"
+
 import {
   getDashboardStats,
   getSourceAnalytics,
-  getDashboardFollowUps,
   getLeads,
 } from "../services/api"
 
@@ -31,8 +31,7 @@ function Dashboard() {
   const [search, setSearch] = useState("")
   const [temperature, setTemperature] = useState("ALL")
   const [sortBy, setSortBy] = useState("newest")
-  const [followUps, setFollowUps] = useState([])
-  const [followUpsLoading, setFollowUpsLoading] = useState(true)
+
   const [loading, setLoading] = useState(true)
   const [analyticsLoading, setAnalyticsLoading] = useState(true)
 
@@ -41,13 +40,12 @@ function Dashboard() {
       setLoading(true)
       setAnalyticsLoading(true)
 
-      const [statsData, leadsData, analyticsData, followUpsData] =
-    await Promise.all([
-    getDashboardStats(),
-    getLeads(),
-    getSourceAnalytics(),
-    getDashboardFollowUps(),
-  ])
+      const [statsData, leadsData, analyticsData] =
+        await Promise.all([
+          getDashboardStats(),
+          getLeads(),
+          getSourceAnalytics(),
+        ])
 
       setStats(statsData)
 
@@ -62,11 +60,6 @@ function Dashboard() {
           ? analyticsData
           : []
       )
-      setFollowUps(
-       Array.isArray(followUpsData)
-        ? followUpsData
-        : []
-)
     } catch (error) {
       console.error(
         "Failed to load dashboard:",
@@ -408,206 +401,7 @@ function Dashboard() {
 
         </div>
 
-{/* =============================== */}
-{/* FOLLOW-UP MANAGEMENT */}
-{/* =============================== */}
 
-<div className="mt-8 rounded-xl bg-white shadow-sm">
-
-  <div className="border-b px-6 py-5">
-
-    <div className="flex items-center gap-3">
-
-      <div className="rounded-lg bg-slate-100 p-2">
-        <RefreshCw
-          size={20}
-          className="text-slate-600"
-        />
-      </div>
-
-      <div>
-
-        <h2 className="text-lg font-semibold text-slate-900">
-          Follow-up Management
-        </h2>
-
-        <p className="text-sm text-slate-500">
-          Track pending and upcoming lead follow-ups
-        </p>
-
-      </div>
-
-    </div>
-
-  </div>
-
-
-  <div className="overflow-x-auto">
-
-    <table className="w-full text-left">
-
-      <thead className="border-b bg-slate-50">
-
-        <tr>
-
-          <th className="px-6 py-4 text-sm font-medium">
-            Lead
-          </th>
-
-          <th className="px-6 py-4 text-sm font-medium">
-            Temperature
-          </th>
-
-          <th className="px-6 py-4 text-sm font-medium">
-            Follow-up
-          </th>
-
-          <th className="px-6 py-4 text-sm font-medium">
-            Scheduled
-          </th>
-
-          <th className="px-6 py-4 text-sm font-medium">
-            Action
-          </th>
-
-        </tr>
-
-      </thead>
-
-
-      <tbody>
-
-        {followUpsLoading ? (
-
-          <tr>
-
-            <td
-              colSpan="5"
-              className="px-6 py-10 text-center text-sm text-slate-500"
-            >
-              Loading follow-ups...
-            </td>
-
-          </tr>
-
-        ) : followUps.length === 0 ? (
-
-          <tr>
-
-            <td
-              colSpan="5"
-              className="px-6 py-10 text-center text-sm text-slate-500"
-            >
-              No pending follow-ups.
-            </td>
-
-          </tr>
-
-        ) : (
-
-          followUps.map((followUp) => (
-
-            <tr
-              key={followUp.id}
-              className="border-b last:border-b-0 hover:bg-slate-50"
-            >
-
-              <td className="px-6 py-4">
-
-                <Link
-                  to={`/leads/${followUp.lead_id}`}
-                  className="font-medium hover:underline"
-                >
-                  {followUp.lead_name || "Unknown Lead"}
-                </Link>
-
-                <div className="text-sm text-slate-500">
-                  {followUp.phone || "-"}
-                </div>
-
-              </td>
-
-
-              <td className="px-6 py-4">
-
-                <TemperatureBadge
-                  temperature={followUp.temperature}
-                />
-
-              </td>
-
-
-              <td className="px-6 py-4">
-
-                <div className="font-medium">
-                  {followUp.follow_up_type}
-                </div>
-
-                <div className="text-sm text-slate-500">
-                  {followUp.status}
-                </div>
-
-              </td>
-
-
-              <td className="px-6 py-4">
-
-                <div
-                  className={
-                    followUp.timing === "DUE"
-                      ? "font-semibold text-red-600"
-                      : "font-medium text-slate-700"
-                  }
-                >
-                  {followUp.timing === "DUE"
-                    ? "Due Now"
-                    : "Upcoming"}
-                </div>
-
-                <div className="text-sm text-slate-500">
-                  {followUp.scheduled_at
-                    ? new Date(
-                        followUp.scheduled_at
-                      ).toLocaleString()
-                    : "-"}
-                </div>
-
-              </td>
-
-
-              <td className="px-6 py-4">
-
-                <div className="text-sm text-slate-700">
-                  {followUp.action}
-                </div>
-
-                {followUp.reason && (
-                  <div className="mt-1 text-xs text-slate-400">
-                    {followUp.reason}
-                  </div>
-                )}
-
-              </td>
-
-            </tr>
-
-          ))
-
-        )}
-
-      </tbody>
-
-    </table>
-
-  </div>
-
-
-  <div className="border-t px-6 py-4 text-sm text-slate-500">
-    {followUps.length} pending follow-up
-    {followUps.length === 1 ? "" : "s"}
-  </div>
-
-</div>
         {/* =============================== */}
         {/* LEAD MANAGEMENT */}
         {/* =============================== */}

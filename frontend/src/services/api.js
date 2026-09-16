@@ -17,6 +17,10 @@ export const getSourceAnalytics = async () => {
   const response = await API.get("/dashboard/source-analytics")
   return response.data
 }
+export const getDashboardFollowUps = async () => {
+  const response = await API.get("/dashboard/follow-ups")
+  return response.data
+}
 
 
 // ===============================
