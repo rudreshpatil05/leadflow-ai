@@ -103,5 +103,18 @@ export const getSalesCopilot = async (leadId) => {
   const response = await API.get(`/leads/${leadId}/sales-copilot`)
   return response.data
 }
+export const generateLeadMessage = async (leadId, messageType) => {
+  const response = await API.post(
+    `/leads/${leadId}/generate-message`,
+    null,
+    {
+      params: {
+        message_type: messageType,
+      },
+    }
+  )
+
+  return response.data
+}
 
 export default API

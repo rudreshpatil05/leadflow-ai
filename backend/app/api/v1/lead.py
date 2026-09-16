@@ -2,7 +2,7 @@ from math import ceil
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
-from backend.app.services.message_generator_service import generate_lead_message
+
 from backend.app.db.database import get_db
 from backend.app.models.lead import Lead
 from backend.app.schemas.lead import (
@@ -11,6 +11,7 @@ from backend.app.schemas.lead import (
     LeadUpdate,
 )
 from backend.app.schemas.qualification import LeadQualificationRequest
+
 from backend.app.services.lead_service import (
     create_lead,
     delete_lead,
@@ -18,10 +19,18 @@ from backend.app.services.lead_service import (
     get_leads,
     update_lead,
 )
+
 from backend.app.services.lead_qualification_service import (
     qualify_and_save_lead,
 )
-from backend.app.services.sales_copilot_service import generate_sales_copilot
+
+from backend.app.services.sales_copilot_service import (
+    generate_sales_copilot,
+)
+
+from backend.app.services.message_generator_service import (
+    generate_lead_message,
+)
 
 
 router = APIRouter(
@@ -30,9 +39,9 @@ router = APIRouter(
 )
 
 
-# =========================================================
+# ---------------------------------------------------------
 # CREATE LEAD
-# =========================================================
+# ---------------------------------------------------------
 
 @router.post(
     "/",
@@ -49,9 +58,9 @@ def create_new_lead(
     )
 
 
-# =========================================================
-# GET ALL LEADS
-# =========================================================
+# ---------------------------------------------------------
+# LIST LEADS
+# ---------------------------------------------------------
 
 @router.get("/")
 def list_leads(
@@ -84,9 +93,9 @@ def list_leads(
     }
 
 
-# =========================================================
+# ---------------------------------------------------------
 # GET SINGLE LEAD
-# =========================================================
+# ---------------------------------------------------------
 
 @router.get(
     "/{lead_id}",
@@ -103,20 +112,18 @@ def get_single_lead(
 
     if lead is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=404,
             detail="Lead not found",
         )
 
     return lead
 
 
-# =========================================================
-# QUALIFY LEAD
-# =========================================================
+# ---------------------------------------------------------
+# AI QUALIFICATION
+# ---------------------------------------------------------
 
-@router.post(
-    "/{lead_id}/qualify",
-)
+@router.post("/{lead_id}/qualify")
 def qualify_lead(
     lead_id: int,
     request: LeadQualificationRequest,
@@ -129,7 +136,7 @@ def qualify_lead(
 
     if lead is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=404,
             detail="Lead not found",
         )
 
@@ -140,9 +147,9 @@ def qualify_lead(
     )
 
 
-# =========================================================
+# ---------------------------------------------------------
 # UPDATE LEAD
-# =========================================================
+# ---------------------------------------------------------
 
 @router.patch(
     "/{lead_id}",
@@ -161,16 +168,16 @@ def update_existing_lead(
 
     if lead is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=404,
             detail="Lead not found",
         )
 
     return lead
 
 
-# =========================================================
+# ---------------------------------------------------------
 # DELETE LEAD
-# =========================================================
+# ---------------------------------------------------------
 
 @router.delete(
     "/{lead_id}",
@@ -187,24 +194,38 @@ def delete_existing_lead(
 
     if not deleted:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=404,
             detail="Lead not found",
         )
 
     return None
+
+
+# ---------------------------------------------------------
+# AI SALES COPILOT
+# ---------------------------------------------------------
 
 @router.get("/{lead_id}/sales-copilot")
 def get_sales_copilot(
     lead_id: int,
     db: Session = Depends(get_db),
 ):
-    lead = get_lead(db=db, lead_id=lead_id)
+    lead = get_lead(
+        db=db,
+        lead_id=lead_id,
+    )
 
     if lead is None:
         raise HTTPException(
             status_code=404,
-            detail="Lead not found"
+            detail="Lead not found",
         )
+
+    return generate_sales_copilot(
+        lead
+    )
+
+
 # ---------------------------------------------------------
 # AI MESSAGE GENERATOR
 # ---------------------------------------------------------
@@ -243,4 +264,3 @@ def generate_message_for_lead(
             status_code=500,
             detail=f"Message generation failed: {str(exc)}",
         )
-    return generate_sales_copilot(lead)

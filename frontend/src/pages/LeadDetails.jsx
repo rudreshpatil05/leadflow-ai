@@ -7,6 +7,7 @@ import {
   Copy,
   Check,
   MessageCircle,
+  Send,
 } from "lucide-react"
 
 import {
@@ -15,7 +16,40 @@ import {
   getLeadFollowUps,
   getLeadNextAction,
   getSalesCopilot,
+  generateLeadMessage,
 } from "../services/api"
+
+
+const MESSAGE_TYPES = [
+  {
+    value: "initial_follow_up",
+    label: "Initial Follow-up",
+  },
+  {
+    value: "whatsapp_follow_up",
+    label: "WhatsApp Follow-up",
+  },
+  {
+    value: "property_recommendation",
+    label: "Property Recommendation",
+  },
+  {
+    value: "site_visit",
+    label: "Site Visit Invitation",
+  },
+  {
+    value: "budget_discussion",
+    label: "Price / Budget Discussion",
+  },
+  {
+    value: "re_engagement",
+    label: "Re-engagement",
+  },
+  {
+    value: "post_site_visit",
+    label: "Post Site-Visit Follow-up",
+  },
+]
 
 
 function LeadDetails() {
@@ -30,6 +64,14 @@ function LeadDetails() {
   const [copilot, setCopilot] = useState(null)
   const [copilotLoading, setCopilotLoading] = useState(false)
   const [copied, setCopied] = useState(false)
+
+  // AI Message Generator
+  const [messageType, setMessageType] = useState("whatsapp_follow_up")
+  const [generatedMessage, setGeneratedMessage] = useState(null)
+  const [messageLoading, setMessageLoading] = useState(false)
+  const [messageCopied, setMessageCopied] = useState(false)
+  const [messageError, setMessageError] = useState("")
+
 
   /*
    * Load AI Sales Copilot
@@ -48,6 +90,65 @@ function LeadDetails() {
       setCopilot(null)
     } finally {
       setCopilotLoading(false)
+    }
+  }
+
+
+  /*
+   * Generate AI Message
+   */
+  const handleGenerateMessage = async () => {
+    if (!id) return
+
+    try {
+      setMessageLoading(true)
+      setMessageError("")
+      setGeneratedMessage(null)
+      setMessageCopied(false)
+
+      const data = await generateLeadMessage(
+        id,
+        messageType
+      )
+
+      setGeneratedMessage(data)
+    } catch (error) {
+      console.error(
+        "Failed to generate AI message:",
+        error
+      )
+
+      setMessageError(
+        error.response?.data?.detail ||
+        "Failed to generate AI message."
+      )
+    } finally {
+      setMessageLoading(false)
+    }
+  }
+
+
+  /*
+   * Copy generated AI message
+   */
+  const copyGeneratedMessage = async () => {
+    if (!generatedMessage?.message) return
+
+    try {
+      await navigator.clipboard.writeText(
+        generatedMessage.message
+      )
+
+      setMessageCopied(true)
+
+      setTimeout(() => {
+        setMessageCopied(false)
+      }, 2000)
+    } catch (error) {
+      console.error(
+        "Failed to copy generated message:",
+        error
+      )
     }
   }
 
@@ -76,7 +177,10 @@ function LeadDetails() {
         setNextAction(nextActionData)
 
       } catch (error) {
-        console.error("Failed to load lead details:", error)
+        console.error(
+          "Failed to load lead details:",
+          error
+        )
       }
     }
 
@@ -88,7 +192,7 @@ function LeadDetails() {
 
 
   /*
-   * Copy WhatsApp message
+   * Copy Sales Copilot WhatsApp message
    */
   const copyWhatsAppMessage = async () => {
     if (!copilot?.whatsapp_message) return
@@ -105,7 +209,10 @@ function LeadDetails() {
       }, 2000)
 
     } catch (error) {
-      console.error("Failed to copy WhatsApp message:", error)
+      console.error(
+        "Failed to copy WhatsApp message:",
+        error
+      )
     }
   }
 
@@ -183,10 +290,8 @@ function LeadDetails() {
 
       <main className="mx-auto max-w-7xl space-y-6 p-8">
 
-
         {/* Top Information Cards */}
         <div className="grid gap-6 lg:grid-cols-3">
-
 
           {/* Lead Information */}
           <div className="rounded-xl bg-white p-6 shadow-sm">
@@ -436,7 +541,6 @@ function LeadDetails() {
 
               <div className="space-y-6">
 
-
                 {/* Summary */}
                 <div>
 
@@ -608,9 +712,239 @@ function LeadDetails() {
         </div>
 
 
+        {/* ================================================= */}
+        {/* AI MESSAGE GENERATOR */}
+        {/* ================================================= */}
+
+        <div className="overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-sm">
+
+          {/* Header */}
+          <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-5 text-white">
+
+            <div className="flex items-center gap-3">
+
+              <div className="rounded-xl bg-white/20 p-2">
+                <Send size={22} />
+              </div>
+
+              <div>
+
+                <h2 className="text-lg font-semibold">
+                  AI Message Generator
+                </h2>
+
+                <p className="text-sm text-emerald-100">
+                  Generate context-specific messages for this lead
+                </p>
+
+              </div>
+
+            </div>
+
+          </div>
+
+
+          {/* Generator Content */}
+          <div className="p-6">
+
+            <div className="grid gap-6 lg:grid-cols-3">
+
+              {/* Message Type */}
+              <div className="lg:col-span-1">
+
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
+                  Message Type
+                </label>
+
+                <select
+                  value={messageType}
+                  onChange={(event) =>
+                    setMessageType(event.target.value)
+                  }
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                >
+
+                  {MESSAGE_TYPES.map((type) => (
+                    <option
+                      key={type.value}
+                      value={type.value}
+                    >
+                      {type.label}
+                    </option>
+                  ))}
+
+                </select>
+
+
+                <button
+                  onClick={handleGenerateMessage}
+                  disabled={messageLoading}
+                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+
+                  {messageLoading ? (
+                    <>
+                      <RefreshCw
+                        size={17}
+                        className="animate-spin"
+                      />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={17} />
+                      Generate AI Message
+                    </>
+                  )}
+
+                </button>
+
+
+                {messageError && (
+                  <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4">
+
+                    <p className="text-sm leading-6 text-red-700">
+                      {messageError}
+                    </p>
+
+                  </div>
+                )}
+
+              </div>
+
+
+              {/* Generated Message */}
+              <div className="lg:col-span-2">
+
+                {!generatedMessage && !messageLoading && (
+                  <div className="flex min-h-[220px] items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50">
+
+                    <div className="text-center">
+
+                      <MessageCircle
+                        size={32}
+                        className="mx-auto mb-3 text-slate-300"
+                      />
+
+                      <p className="text-sm font-medium text-slate-500">
+                        Your AI-generated message will appear here
+                      </p>
+
+                      <p className="mt-1 text-xs text-slate-400">
+                        Select a message type and click Generate
+                      </p>
+
+                    </div>
+
+                  </div>
+                )}
+
+
+                {messageLoading && (
+                  <div className="flex min-h-[220px] items-center justify-center rounded-xl border border-emerald-100 bg-emerald-50">
+
+                    <div className="text-center">
+
+                      <RefreshCw
+                        size={30}
+                        className="mx-auto mb-3 animate-spin text-emerald-600"
+                      />
+
+                      <p className="text-sm font-medium text-emerald-700">
+                        AI is generating your message...
+                      </p>
+
+                    </div>
+
+                  </div>
+                )}
+
+
+                {generatedMessage && !messageLoading && (
+                  <div className="rounded-xl border border-green-200 bg-green-50 p-5">
+
+                    <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+
+                      <div>
+
+                        <div className="flex items-center gap-2 text-green-700">
+
+                          <MessageCircle size={19} />
+
+                          <span className="text-sm font-semibold">
+                            {generatedMessage.message_type || "WhatsApp Message"}
+                          </span>
+
+                        </div>
+
+                        {generatedMessage.subject && (
+                          <p className="mt-1 text-xs text-slate-500">
+                            {generatedMessage.subject}
+                          </p>
+                        )}
+
+                      </div>
+
+
+                      <button
+                        onClick={copyGeneratedMessage}
+                        className="flex items-center justify-center gap-2 rounded-lg border border-green-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-green-50"
+                      >
+
+                        {messageCopied ? (
+                          <>
+                            <Check size={16} />
+                            Copied
+                          </>
+                        ) : (
+                          <>
+                            <Copy size={16} />
+                            Copy Message
+                          </>
+                        )}
+
+                      </button>
+
+                    </div>
+
+
+                    <div className="rounded-xl border border-green-100 bg-white p-5">
+
+                      <p className="whitespace-pre-line text-sm leading-7 text-slate-700">
+                        {generatedMessage.message || "-"}
+                      </p>
+
+                    </div>
+
+
+                    {generatedMessage.sales_note && (
+                      <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
+
+                        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-amber-600">
+                          Salesperson Note
+                        </p>
+
+                        <p className="text-sm leading-6 text-amber-900">
+                          {generatedMessage.sales_note}
+                        </p>
+
+                      </div>
+                    )}
+
+                  </div>
+                )}
+
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+
+
         {/* AI Qualification + Follow Ups */}
         <div className="grid gap-6 lg:grid-cols-3">
-
 
           {/* AI Qualification */}
           <div className="rounded-xl bg-white p-6 shadow-sm lg:col-span-2">
