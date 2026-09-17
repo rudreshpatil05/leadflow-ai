@@ -13,10 +13,12 @@ export const getDashboardStats = async () => {
   const response = await API.get("/dashboard/stats")
   return response.data
 }
+
 export const getSourceAnalytics = async () => {
   const response = await API.get("/dashboard/source-analytics")
   return response.data
 }
+
 export const getDashboardFollowUps = async () => {
   const response = await API.get("/dashboard/follow-ups")
   return response.data
@@ -37,18 +39,15 @@ export const getLeads = async () => {
   return response.data.items || []
 }
 
-
 export const getLead = async (leadId) => {
   const response = await API.get(`/leads/${leadId}`)
   return response.data
 }
 
-
 export const createLead = async (leadData) => {
   const response = await API.post("/leads/", leadData)
   return response.data
 }
-
 
 export const updateLead = async (leadId, leadData) => {
   const response = await API.patch(
@@ -58,7 +57,6 @@ export const updateLead = async (leadId, leadData) => {
 
   return response.data
 }
-
 
 export const qualifyLead = async (leadId, message) => {
   const response = await API.post(
@@ -75,6 +73,20 @@ export const qualifyLead = async (leadId, message) => {
 // ===============================
 // ACTIVITIES
 // ===============================
+
+export const createLeadActivity = async (
+  leadId,
+  activityType,
+  description
+) => {
+  const response = await API.post("/activities/", {
+    lead_id: leadId,
+    activity_type: activityType,
+    description,
+  })
+
+  return response.data
+}
 
 export const getLeadActivities = async (leadId) => {
   const response = await API.get(
@@ -97,21 +109,49 @@ export const getLeadFollowUps = async (leadId) => {
   return response.data
 }
 
+export const completeFollowUp = async (followUpId) => {
+  const response = await API.patch(
+    `/follow-ups/${followUpId}/complete`
+  )
+
+  return response.data
+}
+
 
 // ===============================
 // NEXT BEST ACTION
 // ===============================
 
 export const getLeadNextAction = async (leadId) => {
-  const response = await API.get(`/next-actions/lead/${leadId}`)
+  const response = await API.get(
+    `/next-actions/lead/${leadId}`
+  )
+
   return response.data
 }
 
+
+// ===============================
+// AI SALES COPILOT
+// ===============================
+
 export const getSalesCopilot = async (leadId) => {
-  const response = await API.get(`/leads/${leadId}/sales-copilot`)
+  const response = await API.get(
+    `/leads/${leadId}/sales-copilot`
+  )
+
   return response.data
 }
-export const generateLeadMessage = async (leadId, messageType) => {
+
+
+// ===============================
+// AI MESSAGE GENERATOR
+// ===============================
+
+export const generateLeadMessage = async (
+  leadId,
+  messageType
+) => {
   const response = await API.post(
     `/leads/${leadId}/generate-message`,
     null,
@@ -124,22 +164,35 @@ export const generateLeadMessage = async (leadId, messageType) => {
 
   return response.data
 }
-export const completeFollowUp = async (followUpId) => {
-  const response = await API.patch(
-    `/follow-ups/${followUpId}/complete`
+
+
+// ===============================
+// WHATSAPP
+// ===============================
+
+export const getWhatsAppUrl = (
+  phone,
+  message = ""
+) => {
+  const cleanPhone = String(phone || "").replace(
+    /\D/g,
+    ""
   )
-  return response.data
-}
-export const getWhatsAppUrl = (phone, message = "") => {
-  const cleanPhone = String(phone || "").replace(/\D/g, "")
 
   const normalizedPhone =
     cleanPhone.length === 10
       ? `91${cleanPhone}`
       : cleanPhone
 
-  const encodedMessage = encodeURIComponent(message)
+  const encodedMessage =
+    encodeURIComponent(message)
 
   return `https://wa.me/${normalizedPhone}?text=${encodedMessage}`
 }
+
+
+// ===============================
+// DEFAULT API
+// ===============================
+
 export default API

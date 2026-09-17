@@ -12,7 +12,6 @@ import {
 
 import {
   getLead,
-  updateLead,
   qualifyLead,
   getLeadActivities,
   getLeadFollowUps,
@@ -20,7 +19,7 @@ import {
   getSalesCopilot,
   generateLeadMessage,
   getWhatsAppUrl,
-  createLeadActivity,
+  createLeadActivity
 } from "../services/api"
 
 
@@ -60,47 +59,16 @@ function LeadDetails() {
   const { id } = useParams()
   const navigate = useNavigate()
 
-  // =========================================================
-  // LEAD STATE
-  // =========================================================
-
   const [lead, setLead] = useState(null)
-
-  const [editMode, setEditMode] = useState(false)
-
-  const [editForm, setEditForm] = useState({
-    name: "",
-    email: "",
-    source: "",
-    status: "NEW",
-    temperature: "",
-    notes: "",
-  })
-
-  const [saveLoading, setSaveLoading] = useState(false)
-  const [saveError, setSaveError] = useState("")
-  const [saveSuccess, setSaveSuccess] = useState(false)
-
-  // =========================================================
-  // LEAD INTELLIGENCE STATE
-  // =========================================================
-
   const [activities, setActivities] = useState([])
   const [followUps, setFollowUps] = useState([])
   const [nextAction, setNextAction] = useState(null)
-
-  // =========================================================
-  // SALES COPILOT STATE
-  // =========================================================
 
   const [copilot, setCopilot] = useState(null)
   const [copilotLoading, setCopilotLoading] = useState(false)
   const [copied, setCopied] = useState(false)
 
-  // =========================================================
-  // AI MESSAGE GENERATOR STATE
-  // =========================================================
-
+  // AI Message Generator
   const [messageType, setMessageType] = useState("whatsapp_follow_up")
   const [generatedMessage, setGeneratedMessage] = useState(null)
   const [messageLoading, setMessageLoading] = useState(false)
@@ -108,10 +76,9 @@ function LeadDetails() {
   const [messageError, setMessageError] = useState("")
 
 
-  // =========================================================
-  // LOAD AI SALES COPILOT
-  // =========================================================
-
+  /*
+   * Load AI Sales Copilot
+   */
   const loadSalesCopilot = async () => {
     if (!id) return
 
@@ -128,186 +95,62 @@ function LeadDetails() {
       setCopilotLoading(false)
     }
   }
-
-
-  // =========================================================
-  // FORMAT ACTIVITY TYPE
-  // =========================================================
-
   const formatActivityType = (type) => {
-    if (!type) return "Activity"
+  if (!type) return "Activity"
 
-    return type
-      .replaceAll("_", " ")
-      .toLowerCase()
-      .replace(/\b\w/g, (char) => char.toUpperCase())
+  return type
+    .replaceAll("_", " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase())
+}
+
+const formatActivityDate = (date) => {
+  if (!date) return ""
+
+  const parsedDate = new Date(date)
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return date
   }
 
+  return parsedDate.toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+}
+const openWhatsApp = async (message = "") => {
+  if (!lead?.phone) return
 
-  // =========================================================
-  // FORMAT ACTIVITY DATE
-  // =========================================================
+  const whatsappUrl = getWhatsAppUrl(
+    lead.phone,
+    message
+  )
 
-  const formatActivityDate = (date) => {
-    if (!date) return ""
+  window.open(
+    whatsappUrl,
+    "_blank",
+    "noopener,noreferrer"
+  )
 
-    const parsedDate = new Date(date)
-
-    if (Number.isNaN(parsedDate.getTime())) {
-      return date
-    }
-
-    return parsedDate.toLocaleString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    })
-  }
-
-
-  // =========================================================
-  // START EDITING
-  // =========================================================
-
-  const startEditing = () => {
-    if (!lead) return
-
-    setEditForm({
-      name: lead.name || "",
-      email: lead.email || "",
-      source: lead.source || "",
-      status: lead.status || "NEW",
-      temperature: lead.temperature || "",
-      notes: lead.notes || "",
-    })
-
-    setSaveError("")
-    setSaveSuccess(false)
-    setEditMode(true)
-  }
-
-
-  // =========================================================
-  // HANDLE EDIT FIELD CHANGE
-  // =========================================================
-
-  const handleEditChange = (event) => {
-    const { name, value } = event.target
-
-    setEditForm((current) => ({
-      ...current,
-      [name]: value,
-    }))
-  }
-
-
-  // =========================================================
-  // SAVE LEAD
-  // =========================================================
-
-  const handleSaveLead = async (event) => {
-    event.preventDefault()
-
-    if (!lead) return
-
-    try {
-      setSaveLoading(true)
-      setSaveError("")
-      setSaveSuccess(false)
-
-      const oldStatus = lead.status
-      const oldTemperature = lead.temperature
-
-      const updatedLead = await updateLead(lead.id, {
-        name: editForm.name,
-        email: editForm.email || null,
-        source: editForm.source || null,
-        status: editForm.status,
-        temperature: editForm.temperature || null,
-        notes: editForm.notes || null,
-      })
-
-      setLead(updatedLead)
-      setEditMode(false)
-      setSaveSuccess(true)
-
-      if (
-        oldStatus !== editForm.status ||
-        oldTemperature !== editForm.temperature
-      ) {
-        try {
-          const updatedActivities = await getLeadActivities(lead.id)
-          setActivities(updatedActivities)
-        } catch (activityError) {
-          console.error(
-            "Failed to refresh activities:",
-            activityError
-          )
-        }
-      }
-
-      setTimeout(() => {
-        setSaveSuccess(false)
-      }, 2500)
-
-    } catch (error) {
-      console.error("Failed to update lead:", error)
-
-      setSaveError(
-        error.response?.data?.detail ||
-          "Failed to update lead."
-      )
-    } finally {
-      setSaveLoading(false)
-    }
-  }
-
-
-  // =========================================================
-  // OPEN WHATSAPP
-  // =========================================================
-
-  const openWhatsApp = async (message = "") => {
-    if (!lead?.phone) return
-
-    const whatsappUrl = getWhatsAppUrl(
-      lead.phone,
-      message
+  try {
+    await createLeadActivity(
+      lead.id,
+      "WHATSAPP_OPENED",
+      "WhatsApp conversation opened from Lead Details."
     )
 
-    window.open(
-      whatsappUrl,
-      "_blank",
-      "noopener,noreferrer"
-    )
-
-    try {
-      await createLeadActivity(
-        lead.id,
-        "WHATSAPP_OPENED",
-        "WhatsApp conversation opened from Lead Details."
-      )
-
-      const updatedActivities =
-        await getLeadActivities(lead.id)
-
-      setActivities(updatedActivities)
-
-    } catch (error) {
-      console.error(
-        "Failed to record WhatsApp activity:",
-        error
-      )
-    }
+    const updatedActivities = await getLeadActivities(lead.id)
+    setActivities(updatedActivities)
+  } catch (error) {
+    console.error("Failed to record WhatsApp activity:", error)
   }
-
-
-  // =========================================================
-  // GENERATE AI MESSAGE
-  // =========================================================
-
+}
+  /*
+   * Generate AI Message
+   */
   const handleGenerateMessage = async () => {
     if (!id) return
 
@@ -323,7 +166,6 @@ function LeadDetails() {
       )
 
       setGeneratedMessage(data)
-
     } catch (error) {
       console.error(
         "Failed to generate AI message:",
@@ -332,19 +174,17 @@ function LeadDetails() {
 
       setMessageError(
         error.response?.data?.detail ||
-          "Failed to generate AI message."
+        "Failed to generate AI message."
       )
-
     } finally {
       setMessageLoading(false)
     }
   }
 
 
-  // =========================================================
-  // COPY GENERATED MESSAGE
-  // =========================================================
-
+  /*
+   * Copy generated AI message
+   */
   const copyGeneratedMessage = async () => {
     if (!generatedMessage?.message) return
 
@@ -358,7 +198,6 @@ function LeadDetails() {
       setTimeout(() => {
         setMessageCopied(false)
       }, 2000)
-
     } catch (error) {
       console.error(
         "Failed to copy generated message:",
@@ -368,10 +207,9 @@ function LeadDetails() {
   }
 
 
-  // =========================================================
-  // LOAD LEAD DETAILS
-  // =========================================================
-
+  /*
+   * Load lead details
+   */
   useEffect(() => {
     const loadLeadDetails = async () => {
       try {
@@ -407,10 +245,9 @@ function LeadDetails() {
   }, [id])
 
 
-  // =========================================================
-  // COPY SALES COPILOT WHATSAPP MESSAGE
-  // =========================================================
-
+  /*
+   * Copy Sales Copilot WhatsApp message
+   */
   const copyWhatsAppMessage = async () => {
     if (!copilot?.whatsapp_message) return
 
@@ -434,10 +271,9 @@ function LeadDetails() {
   }
 
 
-  // =========================================================
-  // LOADING STATE
-  // =========================================================
-
+  /*
+   * Loading state
+   */
   if (!lead) {
     return (
       <div className="min-h-screen bg-slate-50 p-8">
@@ -451,17 +287,10 @@ function LeadDetails() {
   }
 
 
-  // =========================================================
-  // UI
-  // =========================================================
-
   return (
     <div className="min-h-screen bg-slate-50">
 
-      {/* ===================================================== */}
-      {/* HEADER */}
-      {/* ===================================================== */}
-
+      {/* Header */}
       <header className="border-b bg-white px-8 py-5">
         <div className="mx-auto max-w-7xl">
 
@@ -472,7 +301,6 @@ function LeadDetails() {
             <ArrowLeft size={17} />
             Back
           </button>
-
 
           <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
 
@@ -486,27 +314,11 @@ function LeadDetails() {
               </p>
             </div>
 
-
-            <div className="flex flex-wrap items-center gap-3">
-
-              {/* EDIT BUTTON */}
-
-              <button
-                onClick={startEditing}
-                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-              >
-                Edit Lead
-              </button>
-
-
-              {/* STATUS */}
+            <div className="flex items-center gap-3">
 
               <span className="rounded-full bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-700">
                 {lead.status || "NEW"}
               </span>
-
-
-              {/* TEMPERATURE */}
 
               {lead.temperature && (
                 <span
@@ -530,218 +342,12 @@ function LeadDetails() {
       </header>
 
 
-      {/* ===================================================== */}
-      {/* EDIT LEAD PANEL */}
-      {/* ===================================================== */}
-
-      {editMode && (
-        <div className="border-b border-blue-100 bg-blue-50 px-8 py-6">
-          <div className="mx-auto max-w-7xl">
-
-            <div className="mb-5 flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-semibold text-slate-900">
-                  Edit Lead
-                </h2>
-
-                <p className="text-sm text-slate-500">
-                  Update salesperson-managed lead information.
-                </p>
-              </div>
-            </div>
-
-
-            {saveError && (
-              <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3">
-                <p className="text-sm text-red-700">
-                  {saveError}
-                </p>
-              </div>
-            )}
-
-
-            <form
-              onSubmit={handleSaveLead}
-              className="grid gap-4 md:grid-cols-2 lg:grid-cols-3"
-            >
-
-              {/* NAME */}
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">
-                  Name
-                </label>
-
-                <input
-                  name="name"
-                  value={editForm.name}
-                  onChange={handleEditChange}
-                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                  placeholder="Lead name"
-                />
-              </div>
-
-
-              {/* EMAIL */}
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">
-                  Email
-                </label>
-
-                <input
-                  type="email"
-                  name="email"
-                  value={editForm.email}
-                  onChange={handleEditChange}
-                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                  placeholder="Email address"
-                />
-              </div>
-
-
-              {/* SOURCE */}
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">
-                  Source
-                </label>
-
-                <input
-                  name="source"
-                  value={editForm.source}
-                  onChange={handleEditChange}
-                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                  placeholder="WEBSITE"
-                />
-              </div>
-
-
-              {/* STATUS */}
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">
-                  Status
-                </label>
-
-                <select
-                  name="status"
-                  value={editForm.status}
-                  onChange={handleEditChange}
-                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                >
-                  <option value="NEW">NEW</option>
-                  <option value="CONTACTED">CONTACTED</option>
-                  <option value="QUALIFIED">QUALIFIED</option>
-                  <option value="SITE_VISIT">SITE VISIT</option>
-                  <option value="NEGOTIATION">NEGOTIATION</option>
-                  <option value="CONVERTED">CONVERTED</option>
-                  <option value="LOST">LOST</option>
-                </select>
-              </div>
-
-
-              {/* TEMPERATURE */}
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">
-                  Temperature
-                </label>
-
-                <select
-                  name="temperature"
-                  value={editForm.temperature}
-                  onChange={handleEditChange}
-                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                >
-                  <option value="">Not Set</option>
-                  <option value="HOT">HOT</option>
-                  <option value="WARM">WARM</option>
-                  <option value="COLD">COLD</option>
-                </select>
-              </div>
-
-
-              {/* NOTES */}
-
-              <div className="md:col-span-2 lg:col-span-3">
-                <label className="mb-1 block text-sm font-medium text-slate-700">
-                  Sales Notes
-                </label>
-
-                <textarea
-                  name="notes"
-                  value={editForm.notes}
-                  onChange={handleEditChange}
-                  rows={4}
-                  className="w-full resize-none rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                  placeholder="Add salesperson notes..."
-                />
-              </div>
-
-
-              {/* ACTION BUTTONS */}
-
-              <div className="flex flex-wrap gap-3 md:col-span-2 lg:col-span-3">
-
-                <button
-                  type="submit"
-                  disabled={saveLoading}
-                  className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {saveLoading
-                    ? "Saving..."
-                    : "Save Changes"}
-                </button>
-
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditMode(false)
-                    setSaveError("")
-                  }}
-                  className="rounded-lg border border-slate-200 bg-white px-5 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-                >
-                  Cancel
-                </button>
-
-              </div>
-
-            </form>
-
-          </div>
-        </div>
-      )}
-
-
-      {/* ===================================================== */}
-      {/* MAIN CONTENT */}
-      {/* ===================================================== */}
-
       <main className="mx-auto max-w-7xl space-y-6 p-8">
 
-
-        {/* SUCCESS MESSAGE */}
-
-        {saveSuccess && (
-          <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3">
-            <p className="text-sm font-medium text-green-700">
-              Lead updated successfully.
-            </p>
-          </div>
-        )}
-
-
-        {/* ================================================= */}
-        {/* TOP INFORMATION CARDS */}
-        {/* ================================================= */}
-
+        {/* Top Information Cards */}
         <div className="grid gap-6 lg:grid-cols-3">
 
-
-          {/* LEAD INFORMATION */}
-
+          {/* Lead Information */}
           <div className="rounded-xl bg-white p-6 shadow-sm">
 
             <h2 className="mb-4 text-lg font-semibold text-slate-900">
@@ -785,8 +391,7 @@ function LeadDetails() {
           </div>
 
 
-          {/* PROPERTY REQUIREMENTS */}
-
+          {/* Property Requirements */}
           <div className="rounded-xl bg-white p-6 shadow-sm">
 
             <h2 className="mb-4 text-lg font-semibold text-slate-900">
@@ -853,8 +458,7 @@ function LeadDetails() {
           </div>
 
 
-          {/* NEXT BEST ACTION */}
-
+          {/* Next Best Action */}
           <div className="rounded-xl bg-white p-6 shadow-sm">
 
             <h2 className="mb-4 text-lg font-semibold text-slate-900">
@@ -875,7 +479,6 @@ function LeadDetails() {
                   </p>
                 </div>
 
-
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                     Action
@@ -886,7 +489,6 @@ function LeadDetails() {
                   </p>
                 </div>
 
-
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                     Channel
@@ -896,7 +498,6 @@ function LeadDetails() {
                     {nextAction.channel || "-"}
                   </p>
                 </div>
-
 
                 {nextAction.reason && (
                   <p className="border-t pt-3 text-sm leading-6 text-slate-500">
@@ -919,15 +520,10 @@ function LeadDetails() {
         </div>
 
 
-        {/* ================================================= */}
-        {/* AI SALES COPILOT */}
-        {/* ================================================= */}
-
+        {/* AI Sales Copilot */}
         <div className="overflow-hidden rounded-2xl border border-violet-200 bg-white shadow-sm">
 
-
-          {/* COPILOT HEADER */}
-
+          {/* Copilot Header */}
           <div className="bg-gradient-to-r from-violet-600 to-indigo-600 px-6 py-5 text-white">
 
             <div className="flex items-center justify-between gap-4">
@@ -977,8 +573,7 @@ function LeadDetails() {
           </div>
 
 
-          {/* COPILOT CONTENT */}
-
+          {/* Copilot Content */}
           <div className="p-6">
 
             {copilotLoading ? (
@@ -1000,9 +595,7 @@ function LeadDetails() {
 
               <div className="space-y-6">
 
-
-                {/* SUMMARY */}
-
+                {/* Summary */}
                 <div>
 
                   <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-400">
@@ -1016,8 +609,7 @@ function LeadDetails() {
                 </div>
 
 
-                {/* PRIORITY */}
-
+                {/* Priority */}
                 <div>
 
                   <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-400">
@@ -1039,8 +631,7 @@ function LeadDetails() {
                 </div>
 
 
-                {/* TALKING POINTS */}
-
+                {/* Talking Points */}
                 <div>
 
                   <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">
@@ -1075,8 +666,7 @@ function LeadDetails() {
                 </div>
 
 
-                {/* SALES STRATEGY */}
-
+                {/* Sales Strategy */}
                 <div>
 
                   <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-400">
@@ -1094,8 +684,7 @@ function LeadDetails() {
                 </div>
 
 
-                {/* WHATSAPP MESSAGE */}
-
+                {/* WhatsApp Message */}
                 <div>
 
                   <div className="mb-3 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
@@ -1104,46 +693,24 @@ function LeadDetails() {
                       Personalized WhatsApp Message
                     </h3>
 
+                    <button
+                      onClick={copyWhatsAppMessage}
+                      className="flex items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                    >
 
-                    <div className="flex flex-wrap gap-2">
+                      {copied ? (
+                        <>
+                          <Check size={16} />
+                          Copied
+                        </>
+                      ) : (
+                        <>
+                          <Copy size={16} />
+                          Copy Message
+                        </>
+                      )}
 
-                      {/* COPY */}
-
-                      <button
-                        onClick={copyWhatsAppMessage}
-                        className="flex items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-                      >
-
-                        {copied ? (
-                          <>
-                            <Check size={16} />
-                            Copied
-                          </>
-                        ) : (
-                          <>
-                            <Copy size={16} />
-                            Copy Message
-                          </>
-                        )}
-
-                      </button>
-
-
-                      {/* OPEN WHATSAPP */}
-
-                      <button
-                        onClick={() =>
-                          openWhatsApp(
-                            copilot.whatsapp_message
-                          )
-                        }
-                        className="flex items-center justify-center gap-2 rounded-lg bg-green-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-green-700"
-                      >
-                        <MessageCircle size={16} />
-                        Open WhatsApp
-                      </button>
-
-                    </div>
+                    </button>
 
                   </div>
 
@@ -1205,9 +772,7 @@ function LeadDetails() {
 
         <div className="overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-sm">
 
-
-          {/* HEADER */}
-
+          {/* Header */}
           <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-5 text-white">
 
             <div className="flex items-center gap-3">
@@ -1233,15 +798,12 @@ function LeadDetails() {
           </div>
 
 
-          {/* GENERATOR CONTENT */}
-
+          {/* Generator Content */}
           <div className="p-6">
 
             <div className="grid gap-6 lg:grid-cols-3">
 
-
-              {/* MESSAGE TYPE */}
-
+              {/* Message Type */}
               <div className="lg:col-span-1">
 
                 <label className="mb-2 block text-sm font-semibold text-slate-700">
@@ -1257,14 +819,12 @@ function LeadDetails() {
                 >
 
                   {MESSAGE_TYPES.map((type) => (
-
                     <option
                       key={type.value}
                       value={type.value}
                     >
                       {type.label}
                     </option>
-
                   ))}
 
                 </select>
@@ -1307,8 +867,7 @@ function LeadDetails() {
               </div>
 
 
-              {/* GENERATED MESSAGE */}
-
+              {/* Generated Message */}
               <div className="lg:col-span-2">
 
                 {!generatedMessage && !messageLoading && (
@@ -1367,12 +926,10 @@ function LeadDetails() {
                           <MessageCircle size={19} />
 
                           <span className="text-sm font-semibold">
-                            {generatedMessage.message_type ||
-                              "WhatsApp Message"}
+                            {generatedMessage.message_type || "WhatsApp Message"}
                           </span>
 
                         </div>
-
 
                         {generatedMessage.subject && (
                           <p className="mt-1 text-xs text-slate-500">
@@ -1383,45 +940,24 @@ function LeadDetails() {
                       </div>
 
 
-                      <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={copyGeneratedMessage}
+                        className="flex items-center justify-center gap-2 rounded-lg border border-green-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-green-50"
+                      >
 
-                        {/* COPY GENERATED MESSAGE */}
+                        {messageCopied ? (
+                          <>
+                            <Check size={16} />
+                            Copied
+                          </>
+                        ) : (
+                          <>
+                            <Copy size={16} />
+                            Copy Message
+                          </>
+                        )}
 
-                        <button
-                          onClick={copyGeneratedMessage}
-                          className="flex items-center justify-center gap-2 rounded-lg border border-green-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-green-50"
-                        >
-
-                          {messageCopied ? (
-                            <>
-                              <Check size={16} />
-                              Copied
-                            </>
-                          ) : (
-                            <>
-                              <Copy size={16} />
-                              Copy Message
-                            </>
-                          )}
-
-                        </button>
-
-
-                        {/* OPEN WHATSAPP */}
-
-                        <button
-                          onClick={() =>
-                            openWhatsApp(
-                              generatedMessage.message
-                            )
-                          }
-                          className="flex items-center justify-center gap-2 rounded-lg bg-green-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-green-700"
-                        >
-                          <MessageCircle size={16} />
-                          Open WhatsApp
-                        </button>
-
-                      </div>
+                      </button>
 
                     </div>
 
@@ -1461,15 +997,10 @@ function LeadDetails() {
         </div>
 
 
-        {/* ================================================= */}
-        {/* AI QUALIFICATION + FOLLOW UPS */}
-        {/* ================================================= */}
-
+        {/* AI Qualification + Follow Ups */}
         <div className="grid gap-6 lg:grid-cols-3">
 
-
-          {/* AI QUALIFICATION */}
-
+          {/* AI Qualification */}
           <div className="rounded-xl bg-white p-6 shadow-sm lg:col-span-2">
 
             <h2 className="mb-4 text-lg font-semibold text-slate-900">
@@ -1484,8 +1015,7 @@ function LeadDetails() {
           </div>
 
 
-          {/* FOLLOW UPS */}
-
+          {/* Follow Ups */}
           <div className="rounded-xl bg-white p-6 shadow-sm">
 
             <h2 className="mb-4 text-lg font-semibold text-slate-900">
@@ -1534,107 +1064,70 @@ function LeadDetails() {
         </div>
 
 
-        {/* ================================================= */}
+        {/* =============================== */}
         {/* ACTIVITY TIMELINE */}
-        {/* ================================================= */}
+        {/* =============================== */}
 
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-
           <div className="mb-6 flex items-center justify-between">
-
             <div>
-
               <h2 className="text-lg font-semibold text-slate-900">
                 Activity Timeline
               </h2>
-
               <p className="text-sm text-slate-500">
                 Complete history of interactions and lead actions
               </p>
-
             </div>
-
 
             <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
               {activities.length} activities
             </span>
-
           </div>
 
-
           {activities.length === 0 ? (
-
             <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center">
-
               <p className="text-sm text-slate-500">
                 No activity recorded yet.
               </p>
-
             </div>
-
           ) : (
-
             <div className="relative ml-2 border-l border-slate-200">
-
               {activities.map((activity) => (
-
                 <div
                   key={activity.id}
                   className="relative pb-7 pl-8 last:pb-0"
                 >
-
-                  {/* TIMELINE DOT */}
-
+                  {/* Timeline dot */}
                   <div className="absolute -left-[7px] top-1 h-3 w-3 rounded-full bg-blue-600 ring-4 ring-white" />
 
-
                   <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-
                     <div className="flex flex-wrap items-start justify-between gap-3">
-
                       <div>
-
                         <p className="text-sm font-semibold text-slate-900">
-                          {formatActivityType(
-                            activity.activity_type
-                          )}
+                          {formatActivityType(activity.activity_type)}
                         </p>
-
 
                         {activity.description && (
                           <p className="mt-1 text-sm text-slate-600">
                             {activity.description}
                           </p>
                         )}
-
                       </div>
 
-
                       <span className="text-xs text-slate-400">
-                        {formatActivityDate(
-                          activity.created_at
-                        )}
+                        {formatActivityDate(activity.created_at)}
                       </span>
-
                     </div>
-
                   </div>
-
                 </div>
-
               ))}
-
             </div>
-
-          )}
-
+           )}
         </div>
 
       </main>
-
     </div>
   )
 }
-
 
 export default LeadDetails

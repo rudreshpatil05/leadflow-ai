@@ -30,6 +30,10 @@ function Dashboard() {
 
   const [search, setSearch] = useState("")
   const [temperature, setTemperature] = useState("ALL")
+  const [status, setStatus] = useState("ALL")
+  const [source, setSource] = useState("ALL")
+  const [minScore, setMinScore] = useState("ALL")
+  const [followUpFilter, setFollowUpFilter] = useState("ALL")
   const [sortBy, setSortBy] = useState("newest")
   const [followUps, setFollowUps] = useState([])
   const [followUpsLoading, setFollowUpsLoading] = useState(true)
@@ -160,6 +164,10 @@ function Dashboard() {
     leads,
     search,
     temperature,
+    status,
+    source,
+    minScore,
+    followUpFilter,
     sortBy,
   ])
 
