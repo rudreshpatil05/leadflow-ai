@@ -19,6 +19,7 @@ import {
   getSalesCopilot,
   generateLeadMessage,
   getWhatsAppUrl,
+  createLeadActivity
 } from "../services/api"
 
 
@@ -94,7 +95,33 @@ function LeadDetails() {
       setCopilotLoading(false)
     }
   }
-  const openWhatsApp = (message = "") => {
+  const formatActivityType = (type) => {
+  if (!type) return "Activity"
+
+  return type
+    .replaceAll("_", " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase())
+}
+
+const formatActivityDate = (date) => {
+  if (!date) return ""
+
+  const parsedDate = new Date(date)
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return date
+  }
+
+  return parsedDate.toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+}
+const openWhatsApp = async (message = "") => {
   if (!lead?.phone) return
 
   const whatsappUrl = getWhatsAppUrl(
@@ -107,8 +134,20 @@ function LeadDetails() {
     "_blank",
     "noopener,noreferrer"
   )
-}
 
+  try {
+    await createLeadActivity(
+      lead.id,
+      "WHATSAPP_OPENED",
+      "WhatsApp conversation opened from Lead Details."
+    )
+
+    const updatedActivities = await getLeadActivities(lead.id)
+    setActivities(updatedActivities)
+  } catch (error) {
+    console.error("Failed to record WhatsApp activity:", error)
+  }
+}
   /*
    * Generate AI Message
    */
@@ -1025,63 +1064,70 @@ function LeadDetails() {
         </div>
 
 
-        {/* Activity Timeline */}
-        <div className="rounded-xl bg-white p-6 shadow-sm">
+        {/* =============================== */}
+        {/* ACTIVITY TIMELINE */}
+        {/* =============================== */}
 
-          <h2 className="mb-6 text-lg font-semibold text-slate-900">
-            Activity Timeline
-          </h2>
-
-          <div className="space-y-5">
-
-            {activities.length === 0 ? (
-
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mb-6 flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">
+                Activity Timeline
+              </h2>
               <p className="text-sm text-slate-500">
-                No activities available.
+                Complete history of interactions and lead actions
               </p>
+            </div>
 
-            ) : (
-
-              activities.map((activity) => (
-
-                <div
-                  key={activity.id}
-                  className="flex gap-4"
-                >
-
-                  <div className="mt-1 h-3 w-3 shrink-0 rounded-full bg-violet-500" />
-
-                  <div className="flex-1 border-b border-slate-100 pb-4">
-
-                    <p className="font-medium text-slate-800">
-                      {activity.activity_type}
-                    </p>
-
-                    <p className="mt-1 text-sm leading-6 text-slate-600">
-                      {activity.description}
-                    </p>
-
-                    <p className="mt-2 text-xs text-slate-400">
-                      {activity.created_at}
-                    </p>
-
-                  </div>
-
-                </div>
-
-              ))
-
-            )}
-
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+              {activities.length} activities
+            </span>
           </div>
 
+          {activities.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center">
+              <p className="text-sm text-slate-500">
+                No activity recorded yet.
+              </p>
+            </div>
+          ) : (
+            <div className="relative ml-2 border-l border-slate-200">
+              {activities.map((activity) => (
+                <div
+                  key={activity.id}
+                  className="relative pb-7 pl-8 last:pb-0"
+                >
+                  {/* Timeline dot */}
+                  <div className="absolute -left-[7px] top-1 h-3 w-3 rounded-full bg-blue-600 ring-4 ring-white" />
+
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">
+                          {formatActivityType(activity.activity_type)}
+                        </p>
+
+                        {activity.description && (
+                          <p className="mt-1 text-sm text-slate-600">
+                            {activity.description}
+                          </p>
+                        )}
+                      </div>
+
+                      <span className="text-xs text-slate-400">
+                        {formatActivityDate(activity.created_at)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+           )}
         </div>
 
       </main>
-
     </div>
   )
 }
-
 
 export default LeadDetails
