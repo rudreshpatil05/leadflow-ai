@@ -116,6 +116,22 @@ export const completeFollowUp = async (followUpId) => {
 
   return response.data
 }
+export const createManualFollowUp = async (
+  leadId,
+  followUpType,
+  scheduledAt,
+  action,
+  reason
+) => {
+  const response = await API.post(`/follow-ups/lead/${leadId}`, {
+    follow_up_type: followUpType,
+    scheduled_at: scheduledAt,
+    action,
+    reason,
+  })
+
+  return response.data
+}
 
 
 // ===============================

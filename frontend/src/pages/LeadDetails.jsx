@@ -16,6 +16,8 @@ import {
   qualifyLead,
   getLeadActivities,
   getLeadFollowUps,
+  completeFollowUp,
+  createManualFollowUp,
   getLeadNextAction,
   getSalesCopilot,
   generateLeadMessage,
@@ -90,6 +92,23 @@ function LeadDetails() {
   const [nextAction, setNextAction] = useState(null)
 
   // =========================================================
+  // FOLLOW-UP MANAGEMENT STATE
+  // =========================================================
+
+  const [showFollowUpForm, setShowFollowUpForm] = useState(false)
+  const [followUpLoading, setFollowUpLoading] = useState(false)
+  const [followUpError, setFollowUpError] = useState("")
+  const [followUpSuccess, setFollowUpSuccess] = useState("")
+  const [completingFollowUpId, setCompletingFollowUpId] = useState(null)
+
+  const [followUpForm, setFollowUpForm] = useState({
+    follow_up_type: "CALL",
+    scheduled_at: "",
+    action: "",
+    reason: "",
+  })
+
+  // =========================================================
   // SALES COPILOT STATE
   // =========================================================
 
@@ -154,6 +173,70 @@ function LeadDetails() {
     const parsedDate = new Date(date)
 
     if (Number.isNaN(parsedDate.getTime())) {
+      return date
+    }
+
+    return parsedDate.toLocaleString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+  }
+
+
+  // =========================================================
+  // FOLLOW-UP DATE HELPERS
+  // =========================================================
+
+  const getFollowUpDate = (date) => {
+    if (!date) return null
+
+    const parsedDate = new Date(date)
+
+    if (Number.isNaN(parsedDate.getTime())) {
+      return null
+    }
+
+    return parsedDate
+  }
+
+
+  const isFollowUpOverdue = (followUp) => {
+    if (!followUp || followUp.status !== "PENDING") {
+      return false
+    }
+
+    const scheduledDate = getFollowUpDate(followUp.scheduled_at)
+
+    if (!scheduledDate) {
+      return false
+    }
+
+    return scheduledDate.getTime() < Date.now()
+  }
+
+
+  const getFollowUpStatus = (followUp) => {
+    if (followUp.status === "COMPLETED") {
+      return "COMPLETED"
+    }
+
+    if (isFollowUpOverdue(followUp)) {
+      return "OVERDUE"
+    }
+
+    return "PENDING"
+  }
+
+
+  const formatFollowUpDate = (date) => {
+    if (!date) return "Date not set"
+
+    const parsedDate = getFollowUpDate(date)
+
+    if (!parsedDate) {
       return date
     }
 
@@ -364,6 +447,152 @@ function LeadDetails() {
         "Failed to copy generated message:",
         error
       )
+    }
+  }
+
+
+  // =========================================================
+  // FOLLOW-UP FORM CHANGE
+  // =========================================================
+
+  const handleFollowUpFormChange = (event) => {
+    const { name, value } = event.target
+
+    setFollowUpForm((previous) => ({
+      ...previous,
+      [name]: value,
+    }))
+  }
+
+
+  // =========================================================
+  // CREATE MANUAL FOLLOW-UP
+  // =========================================================
+
+  const handleCreateManualFollowUp = async (event) => {
+    event.preventDefault()
+
+    if (
+      !followUpForm.scheduled_at ||
+      !followUpForm.action.trim()
+    ) {
+      setFollowUpError(
+        "Please provide a scheduled date/time and action."
+      )
+      setFollowUpSuccess("")
+      return
+    }
+
+    try {
+      setFollowUpLoading(true)
+      setFollowUpError("")
+      setFollowUpSuccess("")
+
+      await createManualFollowUp(
+        id,
+        followUpForm.follow_up_type,
+        followUpForm.scheduled_at,
+        followUpForm.action.trim(),
+        followUpForm.reason.trim()
+      )
+
+      const [updatedFollowUps, updatedActivities] =
+        await Promise.all([
+          getLeadFollowUps(id),
+          getLeadActivities(id),
+        ])
+
+      setFollowUps(updatedFollowUps)
+      setActivities(updatedActivities)
+
+      setFollowUpForm({
+        follow_up_type: "CALL",
+        scheduled_at: "",
+        action: "",
+        reason: "",
+      })
+
+      setShowFollowUpForm(false)
+
+      setFollowUpSuccess(
+        "Follow-up created successfully."
+      )
+
+      setTimeout(() => {
+        setFollowUpSuccess("")
+      }, 3000)
+
+    } catch (error) {
+      console.error(
+        "Failed to create follow-up:",
+        error
+      )
+
+      setFollowUpError(
+        error.response?.data?.detail ||
+          "Failed to create follow-up."
+      )
+
+    } finally {
+      setFollowUpLoading(false)
+    }
+  }
+
+
+  // =========================================================
+  // COMPLETE FOLLOW-UP
+  // =========================================================
+
+  const handleCompleteFollowUp = async (followUpId) => {
+    try {
+      setCompletingFollowUpId(followUpId)
+      setFollowUpError("")
+      setFollowUpSuccess("")
+
+      const result =
+        await completeFollowUp(followUpId)
+
+      const [
+        updatedFollowUps,
+        updatedActivities,
+        updatedNextAction,
+      ] = await Promise.all([
+        getLeadFollowUps(id),
+        getLeadActivities(id),
+        getLeadNextAction(id),
+      ])
+
+      setFollowUps(updatedFollowUps)
+      setActivities(updatedActivities)
+      setNextAction(updatedNextAction)
+
+      if (result?.next_follow_up) {
+        setFollowUpSuccess(
+          "Follow-up completed. Next follow-up created automatically."
+        )
+      } else {
+        setFollowUpSuccess(
+          "Follow-up completed successfully."
+        )
+      }
+
+      setTimeout(() => {
+        setFollowUpSuccess("")
+      }, 3500)
+
+    } catch (error) {
+      console.error(
+        "Failed to complete follow-up:",
+        error
+      )
+
+      setFollowUpError(
+        error.response?.data?.detail ||
+          "Failed to complete follow-up."
+      )
+
+    } finally {
+      setCompletingFollowUpId(null)
     }
   }
 
@@ -728,6 +957,28 @@ function LeadDetails() {
           <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3">
             <p className="text-sm font-medium text-green-700">
               Lead updated successfully.
+            </p>
+          </div>
+        )}
+
+
+        {/* FOLLOW-UP SUCCESS */}
+
+        {followUpSuccess && (
+          <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3">
+            <p className="text-sm font-medium text-green-700">
+              {followUpSuccess}
+            </p>
+          </div>
+        )}
+
+
+        {/* FOLLOW-UP ERROR */}
+
+        {followUpError && (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+            <p className="text-sm font-medium text-red-700">
+              {followUpError}
             </p>
           </div>
         )}
@@ -1488,42 +1739,324 @@ function LeadDetails() {
 
           <div className="rounded-xl bg-white p-6 shadow-sm">
 
-            <h2 className="mb-4 text-lg font-semibold text-slate-900">
-              Follow-ups
-            </h2>
+            <div className="mb-4 flex items-center justify-between gap-3">
+
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">
+                  Follow-ups
+                </h2>
+
+                <p className="mt-1 text-xs text-slate-500">
+                  Manage scheduled sales tasks
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowFollowUpForm((current) => !current)
+                  setFollowUpError("")
+                  setFollowUpSuccess("")
+                }}
+                className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-blue-700"
+              >
+                {showFollowUpForm
+                  ? "Close"
+                  : "+ Add Task"}
+              </button>
+
+            </div>
+
+
+            {/* MANUAL FOLLOW-UP FORM */}
+
+            {showFollowUpForm && (
+
+              <form
+                onSubmit={handleCreateManualFollowUp}
+                className="mb-5 rounded-xl border border-blue-100 bg-blue-50 p-4"
+              >
+
+                <div className="mb-4">
+
+                  <p className="text-sm font-semibold text-slate-900">
+                    Create Follow-up Task
+                  </p>
+
+                  <p className="mt-1 text-xs text-slate-500">
+                    Schedule the next action for this lead.
+                  </p>
+
+                </div>
+
+
+                {/* TASK TYPE */}
+
+                <div className="mb-3">
+
+                  <label className="mb-1 block text-xs font-semibold text-slate-700">
+                    Task Type
+                  </label>
+
+                  <select
+                    name="follow_up_type"
+                    value={followUpForm.follow_up_type}
+                    onChange={handleFollowUpFormChange}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  >
+                    <option value="CALL">
+                      Call
+                    </option>
+
+                    <option value="WHATSAPP">
+                      WhatsApp
+                    </option>
+
+                    <option value="SITE_VISIT">
+                      Site Visit
+                    </option>
+
+                    <option value="PROPERTY_DETAILS">
+                      Property Details
+                    </option>
+
+                    <option value="OTHER">
+                      Other
+                    </option>
+                  </select>
+
+                </div>
+
+
+                {/* DATE AND TIME */}
+
+                <div className="mb-3">
+
+                  <label className="mb-1 block text-xs font-semibold text-slate-700">
+                    Scheduled Date & Time
+                  </label>
+
+                  <input
+                    type="datetime-local"
+                    name="scheduled_at"
+                    value={followUpForm.scheduled_at}
+                    onChange={handleFollowUpFormChange}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  />
+
+                </div>
+
+
+                {/* ACTION */}
+
+                <div className="mb-3">
+
+                  <label className="mb-1 block text-xs font-semibold text-slate-700">
+                    Action
+                  </label>
+
+                  <input
+                    type="text"
+                    name="action"
+                    value={followUpForm.action}
+                    onChange={handleFollowUpFormChange}
+                    placeholder="e.g. Call customer about 2BHK options"
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  />
+
+                </div>
+
+
+                {/* REASON */}
+
+                <div className="mb-4">
+
+                  <label className="mb-1 block text-xs font-semibold text-slate-700">
+                    Notes / Reason
+                  </label>
+
+                  <textarea
+                    name="reason"
+                    value={followUpForm.reason}
+                    onChange={handleFollowUpFormChange}
+                    rows={3}
+                    placeholder="Optional notes for this task..."
+                    className="w-full resize-none rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  />
+
+                </div>
+
+
+                <div className="flex gap-2">
+
+                  <button
+                    type="submit"
+                    disabled={followUpLoading}
+                    className="flex-1 rounded-lg bg-blue-600 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {followUpLoading
+                      ? "Creating..."
+                      : "Create Task"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowFollowUpForm(false)
+                      setFollowUpError("")
+                    }}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                  >
+                    Cancel
+                  </button>
+
+                </div>
+
+              </form>
+            )}
+
+
+            {/* FOLLOW-UP LIST */}
 
             <div className="space-y-4">
 
               {followUps.length === 0 ? (
 
-                <p className="text-sm text-slate-500">
-                  No follow-ups available.
-                </p>
+                <div className="rounded-xl border border-dashed border-slate-300 p-5 text-center">
+
+                  <p className="text-sm font-medium text-slate-600">
+                    No follow-ups available.
+                  </p>
+
+                  <p className="mt-1 text-xs text-slate-400">
+                    Add a task to plan the next sales action.
+                  </p>
+
+                </div>
 
               ) : (
 
-                followUps.map((followUp) => (
+                followUps.map((followUp) => {
 
-                  <div
-                    key={followUp.id}
-                    className="border-b border-slate-100 pb-3 last:border-0"
-                  >
+                  const status =
+                    getFollowUpStatus(followUp)
 
-                    <p className="font-medium text-slate-800">
-                      {followUp.action}
-                    </p>
+                  return (
 
-                    <p className="mt-1 text-sm text-slate-500">
-                      {followUp.follow_up_type}
-                    </p>
+                    <div
+                      key={followUp.id}
+                      className={`rounded-xl border p-4 ${
+                        status === "OVERDUE"
+                          ? "border-red-200 bg-red-50"
+                          : status === "COMPLETED"
+                            ? "border-slate-200 bg-slate-50"
+                            : "border-blue-100 bg-blue-50/40"
+                      }`}
+                    >
 
-                    <p className="mt-1 text-xs font-medium text-slate-400">
-                      {followUp.status}
-                    </p>
+                      <div className="flex items-start justify-between gap-3">
 
-                  </div>
+                        <div className="min-w-0">
 
-                ))
+                          <p
+                            className={`font-semibold ${
+                              status === "COMPLETED"
+                                ? "text-slate-500 line-through"
+                                : "text-slate-800"
+                            }`}
+                          >
+                            {followUp.action}
+                          </p>
+
+                          <p className="mt-1 text-xs font-medium uppercase tracking-wide text-slate-500">
+                            {followUp.follow_up_type}
+                          </p>
+
+                        </div>
+
+
+                        {/* STATUS */}
+
+                        <span
+                          className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${
+                            status === "OVERDUE"
+                              ? "bg-red-100 text-red-700"
+                              : status === "COMPLETED"
+                                ? "bg-slate-200 text-slate-600"
+                                : "bg-blue-100 text-blue-700"
+                          }`}
+                        >
+                          {status}
+                        </span>
+
+                      </div>
+
+
+                      {/* SCHEDULED TIME */}
+
+                      <div className="mt-3">
+
+                        <p
+                          className={`text-xs font-medium ${
+                            status === "OVERDUE"
+                              ? "text-red-700"
+                              : "text-slate-500"
+                          }`}
+                        >
+                          Scheduled:{" "}
+                          {formatFollowUpDate(
+                            followUp.scheduled_at
+                          )}
+                        </p>
+
+                      </div>
+
+
+                      {/* REASON */}
+
+                      {followUp.reason && (
+
+                        <div className="mt-3 border-t border-slate-200/70 pt-3">
+
+                          <p className="text-xs leading-5 text-slate-500">
+                            {followUp.reason}
+                          </p>
+
+                        </div>
+
+                      )}
+
+
+                      {/* COMPLETE BUTTON */}
+
+                      {status !== "COMPLETED" && (
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleCompleteFollowUp(
+                              followUp.id
+                            )
+                          }
+                          disabled={
+                            completingFollowUpId ===
+                            followUp.id
+                          }
+                          className="mt-4 w-full rounded-lg bg-emerald-600 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {completingFollowUpId ===
+                          followUp.id
+                            ? "Completing..."
+                            : "✓ Complete Follow-up"}
+                        </button>
+
+                      )}
+
+                    </div>
+
+                  )
+
+                })
 
               )}
 

@@ -9,6 +9,7 @@ import {
   Snowflake,
   BarChart3,
 } from "lucide-react"
+
 import {
   getDashboardStats,
   getSourceAnalytics,
@@ -16,6 +17,33 @@ import {
   getLeads,
 } from "../services/api"
 
+
+/* =============================== */
+/* INSIGHT CARD */
+/* =============================== */
+
+function InsightCard({ title, value, description }) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <p className="text-sm font-medium text-slate-500">
+        {title}
+      </p>
+
+      <p className="mt-2 text-3xl font-bold text-slate-900">
+        {value}
+      </p>
+
+      <p className="mt-1 text-sm text-slate-500">
+        {description}
+      </p>
+    </div>
+  )
+}
+
+
+/* =============================== */
+/* MAIN DASHBOARD */
+/* =============================== */
 
 function Dashboard() {
   const [stats, setStats] = useState({
@@ -35,23 +63,40 @@ function Dashboard() {
   const [minScore, setMinScore] = useState("ALL")
   const [followUpFilter, setFollowUpFilter] = useState("ALL")
   const [sortBy, setSortBy] = useState("newest")
+
   const [followUps, setFollowUps] = useState([])
-  const [followUpsLoading, setFollowUpsLoading] = useState(true)
-  const [loading, setLoading] = useState(true)
-  const [analyticsLoading, setAnalyticsLoading] = useState(true)
+
+  const [followUpsLoading, setFollowUpsLoading] =
+    useState(true)
+
+  const [loading, setLoading] =
+    useState(true)
+
+  const [analyticsLoading, setAnalyticsLoading] =
+    useState(true)
+
+
+  /* =============================== */
+  /* LOAD DASHBOARD */
+  /* =============================== */
 
   const loadDashboard = async () => {
     try {
       setLoading(true)
       setAnalyticsLoading(true)
+      setFollowUpsLoading(true)
 
-      const [statsData, leadsData, analyticsData, followUpsData] =
-    await Promise.all([
-    getDashboardStats(),
-    getLeads(),
-    getSourceAnalytics(),
-    getDashboardFollowUps(),
-  ])
+      const [
+        statsData,
+        leadsData,
+        analyticsData,
+        followUpsData,
+      ] = await Promise.all([
+        getDashboardStats(),
+        getLeads(),
+        getSourceAnalytics(),
+        getDashboardFollowUps(),
+      ])
 
       setStats(statsData)
 
@@ -66,76 +111,249 @@ function Dashboard() {
           ? analyticsData
           : []
       )
+
       setFollowUps(
-       Array.isArray(followUpsData)
-        ? followUpsData
-        : []
-)
+        Array.isArray(followUpsData)
+          ? followUpsData
+          : []
+      )
+
     } catch (error) {
       console.error(
         "Failed to load dashboard:",
         error
       )
+
     } finally {
       setLoading(false)
       setAnalyticsLoading(false)
+      setFollowUpsLoading(false)
     }
   }
 
+
+  /* =============================== */
+  /* INITIAL LOAD */
+  /* =============================== */
 
   useEffect(() => {
     loadDashboard()
   }, [])
 
 
+  /* =============================== */
+  /* SALES INTELLIGENCE */
+  /* =============================== */
+
+  const salesInsights = useMemo(() => {
+    const allLeads =
+      Array.isArray(leads)
+        ? leads
+        : []
+
+
+    const highIntent = allLeads.filter(
+      (lead) =>
+        lead.temperature === "HOT" ||
+        Number(lead.score || 0) >= 80
+    )
+
+
+    const warmLeads = allLeads.filter(
+      (lead) =>
+        lead.temperature === "WARM"
+    )
+
+
+    const unqualified = allLeads.filter(
+      (lead) =>
+        !lead.temperature ||
+        lead.temperature === "COLD" ||
+        Number(lead.score || 0) < 40
+    )
+
+
+    const sourceCounts =
+      allLeads.reduce(
+        (acc, lead) => {
+          const leadSource =
+            lead.source || "Unknown"
+
+          acc[leadSource] =
+            (acc[leadSource] || 0) + 1
+
+          return acc
+        },
+        {}
+      )
+
+
+    const topSource =
+      Object.entries(sourceCounts)
+        .sort(
+          (a, b) =>
+            b[1] - a[1]
+        )[0] || null
+
+
+    return {
+      highIntentCount:
+        highIntent.length,
+
+      warmCount:
+        warmLeads.length,
+
+      unqualifiedCount:
+        unqualified.length,
+
+      topSource,
+    }
+
+  }, [leads])
+
+
+  /* =============================== */
+  /* FILTERED LEADS */
+  /* =============================== */
+
   const filteredLeads = useMemo(() => {
-    let result = Array.isArray(leads)
-      ? [...leads]
-      : []
+    let result =
+      Array.isArray(leads)
+        ? [...leads]
+        : []
 
 
-    // ===============================
-    // SEARCH
-    // ===============================
+    /* =============================== */
+    /* SEARCH */
+    /* =============================== */
 
     if (search.trim()) {
-      const query = search.toLowerCase()
+      const query =
+        search.toLowerCase()
 
-      result = result.filter((lead) =>
-        [
-          lead.name,
-          lead.email,
-          lead.phone,
-          lead.location,
-          lead.configuration,
-        ]
-          .filter(Boolean)
-          .some((value) =>
-            String(value)
-              .toLowerCase()
-              .includes(query)
-          )
-      )
+      result =
+        result.filter((lead) =>
+          [
+            lead.name,
+            lead.email,
+            lead.phone,
+            lead.location,
+            lead.configuration,
+          ]
+            .filter(Boolean)
+            .some((value) =>
+              String(value)
+                .toLowerCase()
+                .includes(query)
+            )
+        )
     }
 
 
-    // ===============================
-    // TEMPERATURE FILTER
-    // ===============================
+    /* =============================== */
+    /* TEMPERATURE FILTER */
+    /* =============================== */
 
     if (temperature !== "ALL") {
-      result = result.filter(
-        (lead) =>
-          lead.temperature === temperature
-      )
+      result =
+        result.filter(
+          (lead) =>
+            lead.temperature ===
+            temperature
+        )
     }
 
 
-    // ===============================
-    // SORTING
-    // ===============================
+    /* =============================== */
+    /* STATUS FILTER */
+    /* =============================== */
 
-    if (sortBy === "score-high") {
+    if (status !== "ALL") {
+      result =
+        result.filter(
+          (lead) =>
+            lead.status === status
+        )
+    }
+
+
+    /* =============================== */
+    /* SOURCE FILTER */
+    /* =============================== */
+
+    if (source !== "ALL") {
+      result =
+        result.filter(
+          (lead) =>
+            lead.source === source
+        )
+    }
+
+
+    /* =============================== */
+    /* MINIMUM SCORE FILTER */
+    /* =============================== */
+
+    if (minScore !== "ALL") {
+      const minimum =
+        Number(minScore)
+
+      result =
+        result.filter(
+          (lead) =>
+            Number(
+              lead.score || 0
+            ) >= minimum
+        )
+    }
+
+
+    /* =============================== */
+    /* FOLLOW-UP FILTER */
+    /* =============================== */
+
+    if (
+      followUpFilter !== "ALL"
+    ) {
+      result =
+        result.filter((lead) => {
+
+          const hasFollowUp =
+            followUps.some(
+              (followUp) =>
+                Number(
+                  followUp.lead_id
+                ) ===
+                Number(lead.id)
+            )
+
+          if (
+            followUpFilter ===
+            "HAS_FOLLOW_UP"
+          ) {
+            return hasFollowUp
+          }
+
+          if (
+            followUpFilter ===
+            "NO_FOLLOW_UP"
+          ) {
+            return !hasFollowUp
+          }
+
+          return true
+        })
+    }
+
+
+    /* =============================== */
+    /* SORTING */
+    /* =============================== */
+
+    if (
+      sortBy ===
+      "score-high"
+    ) {
       result.sort(
         (a, b) =>
           (b.score ?? 0) -
@@ -143,7 +361,11 @@ function Dashboard() {
       )
     }
 
-    if (sortBy === "score-low") {
+
+    if (
+      sortBy ===
+      "score-low"
+    ) {
       result.sort(
         (a, b) =>
           (a.score ?? 0) -
@@ -151,15 +373,25 @@ function Dashboard() {
       )
     }
 
-    if (sortBy === "newest") {
+
+    if (
+      sortBy ===
+      "newest"
+    ) {
       result.sort(
         (a, b) =>
-          new Date(b.created_at) -
-          new Date(a.created_at)
+          new Date(
+            b.created_at
+          ) -
+          new Date(
+            a.created_at
+          )
       )
     }
 
+
     return result
+
   }, [
     leads,
     search,
@@ -168,12 +400,18 @@ function Dashboard() {
     source,
     minScore,
     followUpFilter,
+    followUps,
     sortBy,
   ])
 
 
+  /* =============================== */
+  /* RENDER */
+  /* =============================== */
+
   return (
     <div className="min-h-screen bg-slate-50">
+
 
       {/* =============================== */}
       {/* HEADER */}
@@ -257,6 +495,72 @@ function Dashboard() {
 
 
         {/* =============================== */}
+        {/* SALES INTELLIGENCE */}
+        {/* =============================== */}
+
+        <section className="mt-8">
+
+          <div className="mb-4">
+
+            <h2 className="text-lg font-semibold text-slate-900">
+              Sales Intelligence
+            </h2>
+
+            <p className="text-sm text-slate-500">
+              Quick signals from your current lead pipeline
+            </p>
+
+          </div>
+
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+
+            <InsightCard
+              title="High Intent Leads"
+              value={
+                salesInsights.highIntentCount
+              }
+              description="Hot or score 80+"
+            />
+
+
+            <InsightCard
+              title="Warm Leads"
+              value={
+                salesInsights.warmCount
+              }
+              description="Leads requiring follow-up"
+            />
+
+
+            <InsightCard
+              title="Needs Attention"
+              value={
+                salesInsights.unqualifiedCount
+              }
+              description="Cold or low-score leads"
+            />
+
+
+            <InsightCard
+              title="Top Lead Source"
+              value={
+                salesInsights.topSource?.[0] ||
+                "N/A"
+              }
+              description={
+                salesInsights.topSource
+                  ? `${salesInsights.topSource[1]} leads`
+                  : "No lead source data"
+              }
+            />
+
+          </div>
+
+        </section>
+
+
+        {/* =============================== */}
         {/* SOURCE ANALYTICS */}
         {/* =============================== */}
 
@@ -267,11 +571,14 @@ function Dashboard() {
             <div className="flex items-center gap-3">
 
               <div className="rounded-lg bg-slate-100 p-2">
+
                 <BarChart3
                   size={20}
                   className="text-slate-600"
                 />
+
               </div>
+
 
               <div>
 
@@ -416,206 +723,236 @@ function Dashboard() {
 
         </div>
 
-{/* =============================== */}
-{/* FOLLOW-UP MANAGEMENT */}
-{/* =============================== */}
 
-<div className="mt-8 rounded-xl bg-white shadow-sm">
+        {/* =============================== */}
+        {/* FOLLOW-UP MANAGEMENT */}
+        {/* =============================== */}
 
-  <div className="border-b px-6 py-5">
+        <div className="mt-8 rounded-xl bg-white shadow-sm">
 
-    <div className="flex items-center gap-3">
+          <div className="border-b px-6 py-5">
 
-      <div className="rounded-lg bg-slate-100 p-2">
-        <RefreshCw
-          size={20}
-          className="text-slate-600"
-        />
-      </div>
+            <div className="flex items-center gap-3">
 
-      <div>
+              <div className="rounded-lg bg-slate-100 p-2">
 
-        <h2 className="text-lg font-semibold text-slate-900">
-          Follow-up Management
-        </h2>
-
-        <p className="text-sm text-slate-500">
-          Track pending and upcoming lead follow-ups
-        </p>
-
-      </div>
-
-    </div>
-
-  </div>
-
-
-  <div className="overflow-x-auto">
-
-    <table className="w-full text-left">
-
-      <thead className="border-b bg-slate-50">
-
-        <tr>
-
-          <th className="px-6 py-4 text-sm font-medium">
-            Lead
-          </th>
-
-          <th className="px-6 py-4 text-sm font-medium">
-            Temperature
-          </th>
-
-          <th className="px-6 py-4 text-sm font-medium">
-            Follow-up
-          </th>
-
-          <th className="px-6 py-4 text-sm font-medium">
-            Scheduled
-          </th>
-
-          <th className="px-6 py-4 text-sm font-medium">
-            Action
-          </th>
-
-        </tr>
-
-      </thead>
-
-
-      <tbody>
-
-        {followUpsLoading ? (
-
-          <tr>
-
-            <td
-              colSpan="5"
-              className="px-6 py-10 text-center text-sm text-slate-500"
-            >
-              Loading follow-ups...
-            </td>
-
-          </tr>
-
-        ) : followUps.length === 0 ? (
-
-          <tr>
-
-            <td
-              colSpan="5"
-              className="px-6 py-10 text-center text-sm text-slate-500"
-            >
-              No pending follow-ups.
-            </td>
-
-          </tr>
-
-        ) : (
-
-          followUps.map((followUp) => (
-
-            <tr
-              key={followUp.id}
-              className="border-b last:border-b-0 hover:bg-slate-50"
-            >
-
-              <td className="px-6 py-4">
-
-                <Link
-                  to={`/leads/${followUp.lead_id}`}
-                  className="font-medium hover:underline"
-                >
-                  {followUp.lead_name || "Unknown Lead"}
-                </Link>
-
-                <div className="text-sm text-slate-500">
-                  {followUp.phone || "-"}
-                </div>
-
-              </td>
-
-
-              <td className="px-6 py-4">
-
-                <TemperatureBadge
-                  temperature={followUp.temperature}
+                <RefreshCw
+                  size={20}
+                  className="text-slate-600"
                 />
 
-              </td>
+              </div>
 
 
-              <td className="px-6 py-4">
+              <div>
 
-                <div className="font-medium">
-                  {followUp.follow_up_type}
-                </div>
+                <h2 className="text-lg font-semibold text-slate-900">
+                  Follow-up Management
+                </h2>
 
-                <div className="text-sm text-slate-500">
-                  {followUp.status}
-                </div>
+                <p className="text-sm text-slate-500">
+                  Track pending and upcoming lead follow-ups
+                </p>
 
-              </td>
+              </div>
 
+            </div>
 
-              <td className="px-6 py-4">
-
-                <div
-                  className={
-                    followUp.timing === "DUE"
-                      ? "font-semibold text-red-600"
-                      : "font-medium text-slate-700"
-                  }
-                >
-                  {followUp.timing === "DUE"
-                    ? "Due Now"
-                    : "Upcoming"}
-                </div>
-
-                <div className="text-sm text-slate-500">
-                  {followUp.scheduled_at
-                    ? new Date(
-                        followUp.scheduled_at
-                      ).toLocaleString()
-                    : "-"}
-                </div>
-
-              </td>
+          </div>
 
 
-              <td className="px-6 py-4">
+          <div className="overflow-x-auto">
 
-                <div className="text-sm text-slate-700">
-                  {followUp.action}
-                </div>
+            <table className="w-full text-left">
 
-                {followUp.reason && (
-                  <div className="mt-1 text-xs text-slate-400">
-                    {followUp.reason}
-                  </div>
+              <thead className="border-b bg-slate-50">
+
+                <tr>
+
+                  <th className="px-6 py-4 text-sm font-medium">
+                    Lead
+                  </th>
+
+                  <th className="px-6 py-4 text-sm font-medium">
+                    Temperature
+                  </th>
+
+                  <th className="px-6 py-4 text-sm font-medium">
+                    Follow-up
+                  </th>
+
+                  <th className="px-6 py-4 text-sm font-medium">
+                    Scheduled
+                  </th>
+
+                  <th className="px-6 py-4 text-sm font-medium">
+                    Action
+                  </th>
+
+                </tr>
+
+              </thead>
+
+
+              <tbody>
+
+                {followUpsLoading ? (
+
+                  <tr>
+
+                    <td
+                      colSpan="5"
+                      className="px-6 py-10 text-center text-sm text-slate-500"
+                    >
+                      Loading follow-ups...
+                    </td>
+
+                  </tr>
+
+                ) : followUps.length === 0 ? (
+
+                  <tr>
+
+                    <td
+                      colSpan="5"
+                      className="px-6 py-10 text-center text-sm text-slate-500"
+                    >
+                      No pending follow-ups.
+                    </td>
+
+                  </tr>
+
+                ) : (
+
+                  followUps.map(
+                    (followUp) => (
+
+                      <tr
+                        key={followUp.id}
+                        className="border-b last:border-b-0 hover:bg-slate-50"
+                      >
+
+                        <td className="px-6 py-4">
+
+                          <Link
+                            to={`/leads/${followUp.lead_id}`}
+                            className="font-medium hover:underline"
+                          >
+                            {followUp.lead_name ||
+                              "Unknown Lead"}
+                          </Link>
+
+                          <div className="text-sm text-slate-500">
+                            {followUp.phone ||
+                              "-"}
+                          </div>
+
+                        </td>
+
+
+                        <td className="px-6 py-4">
+
+                          <TemperatureBadge
+                            temperature={
+                              followUp.temperature
+                            }
+                          />
+
+                        </td>
+
+
+                        <td className="px-6 py-4">
+
+                          <div className="font-medium">
+                            {
+                              followUp.follow_up_type
+                            }
+                          </div>
+
+                          <div className="text-sm text-slate-500">
+                            {
+                              followUp.status
+                            }
+                          </div>
+
+                        </td>
+
+
+                        <td className="px-6 py-4">
+
+                          <div
+                            className={
+                              followUp.timing ===
+                              "DUE"
+                                ? "font-semibold text-red-600"
+                                : "font-medium text-slate-700"
+                            }
+                          >
+
+                            {followUp.timing ===
+                            "DUE"
+                              ? "Due Now"
+                              : "Upcoming"}
+
+                          </div>
+
+
+                          <div className="text-sm text-slate-500">
+
+                            {followUp.scheduled_at
+                              ? new Date(
+                                  followUp.scheduled_at
+                                ).toLocaleString()
+                              : "-"}
+
+                          </div>
+
+                        </td>
+
+
+                        <td className="px-6 py-4">
+
+                          <div className="text-sm text-slate-700">
+                            {followUp.action}
+                          </div>
+
+
+                          {followUp.reason && (
+
+                            <div className="mt-1 text-xs text-slate-400">
+                              {followUp.reason}
+                            </div>
+
+                          )}
+
+                        </td>
+
+                      </tr>
+
+                    )
+                  )
+
                 )}
 
-              </td>
+              </tbody>
 
-            </tr>
+            </table>
 
-          ))
-
-        )}
-
-      </tbody>
-
-    </table>
-
-  </div>
+          </div>
 
 
-  <div className="border-t px-6 py-4 text-sm text-slate-500">
-    {followUps.length} pending follow-up
-    {followUps.length === 1 ? "" : "s"}
-  </div>
+          <div className="border-t px-6 py-4 text-sm text-slate-500">
 
-</div>
+            {followUps.length} pending follow-up
+            {followUps.length === 1
+              ? ""
+              : "s"}
+
+          </div>
+
+        </div>
+
+
         {/* =============================== */}
         {/* LEAD MANAGEMENT */}
         {/* =============================== */}
@@ -655,7 +992,9 @@ function Dashboard() {
                     placeholder="Search leads..."
                     value={search}
                     onChange={(e) =>
-                      setSearch(e.target.value)
+                      setSearch(
+                        e.target.value
+                      )
                     }
                     className="rounded-lg border py-2 pl-10 pr-4 text-sm outline-none focus:ring-2"
                   />
@@ -668,7 +1007,9 @@ function Dashboard() {
                 <select
                   value={temperature}
                   onChange={(e) =>
-                    setTemperature(e.target.value)
+                    setTemperature(
+                      e.target.value
+                    )
                   }
                   className="rounded-lg border px-3 py-2 text-sm outline-none"
                 >
@@ -697,7 +1038,9 @@ function Dashboard() {
                 <select
                   value={sortBy}
                   onChange={(e) =>
-                    setSortBy(e.target.value)
+                    setSortBy(
+                      e.target.value
+                    )
                   }
                   className="rounded-lg border px-3 py-2 text-sm outline-none"
                 >
@@ -838,13 +1181,16 @@ function Dashboard() {
                         <td className="px-6 py-4">
 
                           <span className="font-semibold">
-                            {lead.score ?? "-"}
+                            {lead.score ??
+                              "-"}
                           </span>
 
                           {lead.score != null && (
+
                             <span className="text-sm text-slate-400">
                               /100
                             </span>
+
                           )}
 
                         </td>
@@ -891,8 +1237,13 @@ function Dashboard() {
           {/* RESULT COUNT */}
 
           <div className="border-t px-6 py-4 text-sm text-slate-500">
-            Showing {filteredLeads.length} of{" "}
-            {leads.length} leads
+
+            Showing{" "}
+            {filteredLeads.length}{" "}
+            of{" "}
+            {leads.length}{" "}
+            leads
+
           </div>
 
         </div>
