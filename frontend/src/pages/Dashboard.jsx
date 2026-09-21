@@ -222,6 +222,103 @@ function Dashboard() {
         ? [...leads]
         : []
 
+  /* =============================== */
+  /* PRIORITY SALES QUEUE */
+  /* =============================== */
+
+  const priorityQueue = useMemo(() => {
+    const allLeads = Array.isArray(leads) ? leads : []
+
+    const getPriority = (lead) => {
+      const leadFollowUps = followUps.filter(
+        (followUp) =>
+          Number(followUp.lead_id) === Number(lead.id)
+      )
+
+      const hasDueFollowUp = leadFollowUps.some(
+        (followUp) => followUp.timing === "DUE"
+      )
+
+      const score = Number(lead.score || 0)
+      const temperature = lead.temperature
+
+      if (
+        temperature === "HOT" &&
+        hasDueFollowUp
+      ) {
+        return {
+          level: "URGENT",
+          rank: 4,
+        }
+      }
+
+      if (
+        temperature === "HOT" ||
+        score >= 80
+      ) {
+        return {
+          level: "HIGH",
+          rank: 3,
+        }
+      }
+
+      if (
+        (temperature === "WARM" &&
+          hasDueFollowUp) ||
+        score >= 60
+      ) {
+        return {
+          level: "MEDIUM",
+          rank: 2,
+        }
+      }
+
+      if (temperature === "WARM") {
+        return {
+          level: "MEDIUM",
+          rank: 2,
+        }
+      }
+
+      return {
+        level: "NORMAL",
+        rank: 1,
+      }
+    }
+
+    return allLeads
+      .map((lead) => {
+        const priority = getPriority(lead)
+
+        const leadFollowUps = followUps.filter(
+          (followUp) =>
+            Number(followUp.lead_id) === Number(lead.id)
+        )
+
+        const dueFollowUp = leadFollowUps.find(
+          (followUp) => followUp.timing === "DUE"
+        )
+
+        return {
+          ...lead,
+          priority: priority.level,
+          priorityRank: priority.rank,
+          dueFollowUp,
+        }
+      })
+      .sort((a, b) => {
+        if (b.priorityRank !== a.priorityRank) {
+          return b.priorityRank - a.priorityRank
+        }
+
+        return (
+          Number(b.score || 0) -
+          Number(a.score || 0)
+        )
+      })
+      .slice(0, 10)
+  }, [leads, followUps])
+
 
     /* =============================== */
     /* SEARCH */
@@ -952,7 +1049,195 @@ function Dashboard() {
 
         </div>
 
+  {/* =============================== */}
+  {/* PRIORITY SALES QUEUE */}
+  {/* =============================== */}
 
+  <div className="mt-8 rounded-xl bg-white shadow-sm">
+
+    <div className="border-b px-6 py-5">
+
+      <div>
+        <h2 className="text-lg font-semibold text-slate-900">
+          Priority Sales Queue
+        </h2>
+
+        <p className="text-sm text-slate-500">
+          Leads that should receive sales attention first
+        </p>
+      </div>
+
+    </div>
+
+    <div className="overflow-x-auto">
+
+      <table className="w-full text-left">
+
+        <thead className="border-b bg-slate-50">
+
+          <tr>
+
+            <th className="px-6 py-4 text-sm font-medium">
+              Priority
+            </th>
+
+            <th className="px-6 py-4 text-sm font-medium">
+              Lead
+            </th>
+
+            <th className="px-6 py-4 text-sm font-medium">
+              Score
+            </th>
+
+            <th className="px-6 py-4 text-sm font-medium">
+              Temperature
+            </th>
+
+            <th className="px-6 py-4 text-sm font-medium">
+              Follow-up
+            </th>
+
+            <th className="px-6 py-4 text-sm font-medium">
+              Next Action
+            </th>
+
+          </tr>
+
+        </thead>
+
+        <tbody>
+
+          {priorityQueue.length === 0 ? (
+
+            <tr>
+
+              <td
+                colSpan="6"
+                className="px-6 py-10 text-center text-sm text-slate-500"
+              >
+                No leads available for prioritization.
+              </td>
+
+            </tr>
+
+          ) : (
+
+            priorityQueue.map((lead) => (
+
+              <tr
+                key={lead.id}
+                className="border-b last:border-b-0 hover:bg-slate-50"
+              >
+
+                {/* PRIORITY */}
+
+                <td className="px-6 py-4">
+
+                  <PriorityBadge
+                    priority={lead.priority}
+                  />
+
+                </td>
+
+
+                {/* LEAD */}
+
+                <td className="px-6 py-4">
+
+                  <Link
+                    to={`/leads/${lead.id}`}
+                    className="font-medium text-slate-900 hover:underline"
+                  >
+                    {lead.name || "Unnamed Lead"}
+                  </Link>
+
+                  <div className="text-sm text-slate-500">
+                    {lead.phone ||
+                      lead.email ||
+                      "-"}
+                  </div>
+
+                </td>
+
+
+                {/* SCORE */}
+
+                <td className="px-6 py-4">
+
+                  <span className="font-semibold">
+                    {lead.score ?? 0}
+                  </span>
+
+                  <span className="text-sm text-slate-400">
+                    /100
+                  </span>
+
+                </td>
+
+
+                {/* TEMPERATURE */}
+
+                <td className="px-6 py-4">
+
+                  <TemperatureBadge
+                    temperature={
+                      lead.temperature
+                    }
+                  />
+
+                </td>
+
+
+                {/* FOLLOW-UP */}
+
+                <td className="px-6 py-4">
+
+                  {lead.dueFollowUp ? (
+
+                    <span className="font-semibold text-red-600">
+                      Due Now
+                    </span>
+
+                  ) : (
+
+                    <span className="text-sm text-slate-500">
+                      No due follow-up
+                    </span>
+
+                  )}
+
+                </td>
+
+
+                {/* NEXT ACTION */}
+
+                <td className="px-6 py-4">
+
+                  <span className="text-sm text-slate-700">
+                    {lead.next_best_action ||
+                      "Qualify and contact lead"}
+                  </span>
+
+                </td>
+
+              </tr>
+
+            ))
+
+          )}
+
+        </tbody>
+
+      </table>
+
+    </div>
+
+    <div className="border-t px-6 py-4 text-sm text-slate-500">
+      Showing {priorityQueue.length} priority lead
+      {priorityQueue.length === 1 ? "" : "s"}
+    </div>
+
+  </div>
         {/* =============================== */}
         {/* LEAD MANAGEMENT */}
         {/* =============================== */}
@@ -1064,6 +1349,8 @@ function Dashboard() {
             </div>
 
           </div>
+
+
 
 
           {/* TABLE */}
@@ -1290,7 +1577,36 @@ function StatCard({
   )
 }
 
+/* =============================== */
+/* PRIORITY BADGE */
+/* =============================== */
 
+function PriorityBadge({ priority }) {
+  const styles = {
+    URGENT:
+      "bg-red-100 text-red-700 border-red-200",
+
+    HIGH:
+      "bg-orange-100 text-orange-700 border-orange-200",
+
+    MEDIUM:
+      "bg-yellow-100 text-yellow-700 border-yellow-200",
+
+    NORMAL:
+      "bg-slate-100 text-slate-600 border-slate-200",
+  }
+
+  return (
+    <span
+      className={`rounded-full border px-3 py-1 text-xs font-semibold ${
+        styles[priority] ||
+        styles.NORMAL
+      }`}
+    >
+      {priority || "NORMAL"}
+    </span>
+  )
+}
 /* =============================== */
 /* TEMPERATURE BADGE */
 /* =============================== */
