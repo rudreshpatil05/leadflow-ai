@@ -1101,6 +1101,10 @@ function Dashboard() {
               Next Action
             </th>
 
+            <th className="px-6 py-4 text-sm font-medium">
+              Actions
+            </th>
+
           </tr>
 
         </thead>
@@ -1112,7 +1116,7 @@ function Dashboard() {
             <tr>
 
               <td
-                colSpan="6"
+                colSpan="7"
                 className="px-6 py-10 text-center text-sm text-slate-500"
               >
                 No leads available for prioritization.
@@ -1217,6 +1221,41 @@ function Dashboard() {
                     {lead.next_best_action ||
                       "Qualify and contact lead"}
                   </span>
+
+                </td>
+
+                {/* ACTIONS */}
+
+                <td className="px-6 py-4">
+
+                  <div className="flex flex-wrap gap-2">
+
+                    <Link
+                      to={`/leads/${lead.id}`}
+                      className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                    >
+                      Open
+                    </Link>
+
+                    {lead.phone && (
+                      <a
+                        href={`tel:${lead.phone}`}
+                        className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700"
+                      >
+                        Call
+                      </a>
+                    )}
+
+                    {lead.dueFollowUp && (
+                      <Link
+                        to={`/leads/${lead.id}`}
+                        className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+                      >
+                        Follow-up
+                      </Link>
+                    )}
+
+                  </div>
 
                 </td>
 
