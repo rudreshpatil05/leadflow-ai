@@ -61,7 +61,9 @@ class Lead(Base):
         nullable=True
     )
 
-    # AI-extracted property requirements
+    # ---------------------------------------------------------
+    # AI-EXTRACTED PROPERTY REQUIREMENTS
+    # ---------------------------------------------------------
 
     property_type: Mapped[str | None] = mapped_column(
         String(50),
@@ -114,7 +116,9 @@ class Lead(Base):
         nullable=True
     )
 
-    # AI qualification
+    # ---------------------------------------------------------
+    # AI QUALIFICATION
+    # ---------------------------------------------------------
 
     qualification_reasons: Mapped[str | None] = mapped_column(
         Text,
@@ -130,6 +134,48 @@ class Lead(Base):
         Text,
         nullable=True
     )
+
+    # ---------------------------------------------------------
+    # SALES CONVERSION TRACKING
+    # ---------------------------------------------------------
+
+    conversion_date: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        nullable=True
+    )
+
+    deal_value: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True
+    )
+
+    conversion_notes: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True
+    )
+
+    # ---------------------------------------------------------
+    # LOST LEAD TRACKING
+    # ---------------------------------------------------------
+
+    lost_date: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        nullable=True
+    )
+
+    lost_reason: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True
+    )
+
+    lost_notes: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True
+    )
+
+    # ---------------------------------------------------------
+    # TIMESTAMPS
+    # ---------------------------------------------------------
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime,

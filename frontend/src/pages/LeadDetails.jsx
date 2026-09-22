@@ -8,6 +8,9 @@ import {
   Check,
   MessageCircle,
   Send,
+  X,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react"
 
 import {
@@ -68,6 +71,20 @@ const SALES_PIPELINE_STAGES = [
   "CONVERTED",
 ]
 
+
+const LOST_REASONS = [
+  "Budget mismatch",
+  "Bought another property",
+  "Location mismatch",
+  "Timeline changed",
+  "Financing issue",
+  "Not interested",
+  "Could not contact",
+  "Duplicate lead",
+  "Other",
+]
+
+
 const formatPipelineStage = (stage) => {
   if (!stage) return "NEW"
 
@@ -76,6 +93,7 @@ const formatPipelineStage = (stage) => {
     .toLowerCase()
     .replace(/\b\w/g, (char) => char.toUpperCase())
 }
+
 
 function LeadDetails() {
   const { id } = useParams()
@@ -111,6 +129,40 @@ function LeadDetails() {
   const [pipelineSuccess, setPipelineSuccess] = useState("")
 
   // =========================================================
+  // CONVERSION / LOST STATE
+  // =========================================================
+
+  const [showConversionModal, setShowConversionModal] =
+    useState(false)
+
+  const [showLostModal, setShowLostModal] =
+    useState(false)
+
+  const [conversionLoading, setConversionLoading] =
+    useState(false)
+
+  const [lostLoading, setLostLoading] =
+    useState(false)
+
+  const [conversionError, setConversionError] =
+    useState("")
+
+  const [lostError, setLostError] =
+    useState("")
+
+  const [conversionForm, setConversionForm] = useState({
+    conversion_date: new Date().toISOString().slice(0, 16),
+    deal_value: "",
+    conversion_notes: "",
+  })
+
+  const [lostForm, setLostForm] = useState({
+    lost_date: new Date().toISOString().slice(0, 16),
+    lost_reason: "",
+    lost_notes: "",
+  })
+
+  // =========================================================
   // LEAD INTELLIGENCE STATE
   // =========================================================
 
@@ -122,11 +174,20 @@ function LeadDetails() {
   // FOLLOW-UP MANAGEMENT STATE
   // =========================================================
 
-  const [showFollowUpForm, setShowFollowUpForm] = useState(false)
-  const [followUpLoading, setFollowUpLoading] = useState(false)
-  const [followUpError, setFollowUpError] = useState("")
-  const [followUpSuccess, setFollowUpSuccess] = useState("")
-  const [completingFollowUpId, setCompletingFollowUpId] = useState(null)
+  const [showFollowUpForm, setShowFollowUpForm] =
+    useState(false)
+
+  const [followUpLoading, setFollowUpLoading] =
+    useState(false)
+
+  const [followUpError, setFollowUpError] =
+    useState("")
+
+  const [followUpSuccess, setFollowUpSuccess] =
+    useState("")
+
+  const [completingFollowUpId, setCompletingFollowUpId] =
+    useState(null)
 
   const [followUpForm, setFollowUpForm] = useState({
     follow_up_type: "CALL",
@@ -140,18 +201,29 @@ function LeadDetails() {
   // =========================================================
 
   const [copilot, setCopilot] = useState(null)
-  const [copilotLoading, setCopilotLoading] = useState(false)
+  const [copilotLoading, setCopilotLoading] =
+    useState(false)
+
   const [copied, setCopied] = useState(false)
 
   // =========================================================
   // AI MESSAGE GENERATOR STATE
   // =========================================================
 
-  const [messageType, setMessageType] = useState("whatsapp_follow_up")
-  const [generatedMessage, setGeneratedMessage] = useState(null)
-  const [messageLoading, setMessageLoading] = useState(false)
-  const [messageCopied, setMessageCopied] = useState(false)
-  const [messageError, setMessageError] = useState("")
+  const [messageType, setMessageType] =
+    useState("whatsapp_follow_up")
+
+  const [generatedMessage, setGeneratedMessage] =
+    useState(null)
+
+  const [messageLoading, setMessageLoading] =
+    useState(false)
+
+  const [messageCopied, setMessageCopied] =
+    useState(false)
+
+  const [messageError, setMessageError] =
+    useState("")
 
 
   // =========================================================
@@ -168,7 +240,11 @@ function LeadDetails() {
 
       setCopilot(data)
     } catch (error) {
-      console.error("Failed to load Sales Copilot:", error)
+      console.error(
+        "Failed to load Sales Copilot:",
+        error
+      )
+
       setCopilot(null)
     } finally {
       setCopilotLoading(false)
@@ -235,7 +311,9 @@ function LeadDetails() {
       return false
     }
 
-    const scheduledDate = getFollowUpDate(followUp.scheduled_at)
+    const scheduledDate = getFollowUpDate(
+      followUp.scheduled_at
+    )
 
     if (!scheduledDate) {
       return false
@@ -348,7 +426,9 @@ function LeadDetails() {
         oldTemperature !== editForm.temperature
       ) {
         try {
-          const updatedActivities = await getLeadActivities(lead.id)
+          const updatedActivities =
+            await getLeadActivities(lead.id)
+
           setActivities(updatedActivities)
         } catch (activityError) {
           console.error(
@@ -361,9 +441,11 @@ function LeadDetails() {
       setTimeout(() => {
         setSaveSuccess(false)
       }, 2500)
-
     } catch (error) {
-      console.error("Failed to update lead:", error)
+      console.error(
+        "Failed to update lead:",
+        error
+      )
 
       setSaveError(
         error.response?.data?.detail ||
@@ -376,39 +458,325 @@ function LeadDetails() {
 
 
   // =========================================================
+  // OPEN CONVERSION MODAL
+  // =========================================================
+
+  const openConversionModal = () => {
+    setConversionError("")
+
+    setConversionForm({
+      conversion_date:
+        lead?.conversion_date
+          ? new Date(lead.conversion_date)
+              .toISOString()
+              .slice(0, 16)
+          : new Date()
+              .toISOString()
+              .slice(0, 16),
+
+      deal_value:
+        lead?.deal_value !== null &&
+        lead?.deal_value !== undefined
+          ? String(lead.deal_value)
+          : "",
+
+      conversion_notes:
+        lead?.conversion_notes || "",
+    })
+
+    setShowConversionModal(true)
+  }
+
+
+  // =========================================================
+  // OPEN LOST MODAL
+  // =========================================================
+
+  const openLostModal = () => {
+    setLostError("")
+
+    setLostForm({
+      lost_date:
+        lead?.lost_date
+          ? new Date(lead.lost_date)
+              .toISOString()
+              .slice(0, 16)
+          : new Date()
+              .toISOString()
+              .slice(0, 16),
+
+      lost_reason:
+        lead?.lost_reason || "",
+
+      lost_notes:
+        lead?.lost_notes || "",
+    })
+
+    setShowLostModal(true)
+  }
+
+
+  // =========================================================
+  // HANDLE CONVERSION FORM CHANGE
+  // =========================================================
+
+  const handleConversionChange = (event) => {
+    const { name, value } = event.target
+
+    setConversionForm((current) => ({
+      ...current,
+      [name]: value,
+    }))
+  }
+
+
+  // =========================================================
+  // HANDLE LOST FORM CHANGE
+  // =========================================================
+
+  const handleLostChange = (event) => {
+    const { name, value } = event.target
+
+    setLostForm((current) => ({
+      ...current,
+      [name]: value,
+    }))
+  }
+
+
+  // =========================================================
+  // CONVERT LEAD
+  // =========================================================
+
+  const handleConvertLead = async (event) => {
+    event.preventDefault()
+
+    if (!lead) return
+
+    if (!conversionForm.conversion_date) {
+      setConversionError(
+        "Please select the conversion date."
+      )
+
+      return
+    }
+
+    if (
+      !conversionForm.deal_value ||
+      Number(conversionForm.deal_value) <= 0
+    ) {
+      setConversionError(
+        "Please enter a valid deal value."
+      )
+
+      return
+    }
+
+    try {
+      setConversionLoading(true)
+      setConversionError("")
+      setPipelineError("")
+      setPipelineSuccess("")
+
+      const updatedLead = await updateLead(
+        lead.id,
+        {
+          status: "CONVERTED",
+          conversion_date:
+            conversionForm.conversion_date,
+          deal_value:
+            Number(conversionForm.deal_value),
+          conversion_notes:
+            conversionForm.conversion_notes.trim() ||
+            null,
+          lost_date: null,
+          lost_reason: null,
+          lost_notes: null,
+        }
+      )
+
+      setLead(updatedLead)
+
+      await createLeadActivity(
+        lead.id,
+        "LEAD_CONVERTED",
+        `Lead converted successfully. Deal value: ₹${Number(
+          conversionForm.deal_value
+        ).toLocaleString("en-IN")}.`
+      )
+
+      const updatedActivities =
+        await getLeadActivities(lead.id)
+
+      setActivities(updatedActivities)
+
+      setShowConversionModal(false)
+
+      setPipelineSuccess(
+        "Lead converted successfully."
+      )
+
+      setTimeout(() => {
+        setPipelineSuccess("")
+      }, 3500)
+    } catch (error) {
+      console.error(
+        "Failed to convert lead:",
+        error
+      )
+
+      setConversionError(
+        error.response?.data?.detail ||
+          "Failed to convert lead."
+      )
+    } finally {
+      setConversionLoading(false)
+    }
+  }
+
+
+  // =========================================================
+  // MARK LEAD AS LOST
+  // =========================================================
+
+  const handleMarkLeadLost = async (event) => {
+    event.preventDefault()
+
+    if (!lead) return
+
+    if (!lostForm.lost_date) {
+      setLostError(
+        "Please select the lost date."
+      )
+
+      return
+    }
+
+    if (!lostForm.lost_reason) {
+      setLostError(
+        "Please select a lost reason."
+      )
+
+      return
+    }
+
+    try {
+      setLostLoading(true)
+      setLostError("")
+      setPipelineError("")
+      setPipelineSuccess("")
+
+      const updatedLead = await updateLead(
+        lead.id,
+        {
+          status: "LOST",
+          lost_date: lostForm.lost_date,
+          lost_reason: lostForm.lost_reason,
+          lost_notes:
+            lostForm.lost_notes.trim() ||
+            null,
+          conversion_date: null,
+          deal_value: null,
+          conversion_notes: null,
+        }
+      )
+
+      setLead(updatedLead)
+
+      await createLeadActivity(
+        lead.id,
+        "LEAD_LOST",
+        `Lead marked as lost. Reason: ${lostForm.lost_reason}.`
+      )
+
+      const updatedActivities =
+        await getLeadActivities(lead.id)
+
+      setActivities(updatedActivities)
+
+      setShowLostModal(false)
+
+      setPipelineSuccess(
+        "Lead marked as lost successfully."
+      )
+
+      setTimeout(() => {
+        setPipelineSuccess("")
+      }, 3500)
+    } catch (error) {
+      console.error(
+        "Failed to mark lead as lost:",
+        error
+      )
+
+      setLostError(
+        error.response?.data?.detail ||
+          "Failed to mark lead as lost."
+      )
+    } finally {
+      setLostLoading(false)
+    }
+  }
+
+
+  // =========================================================
   // UPDATE SALES PIPELINE
   // =========================================================
 
   const handlePipelineChange = async (nextStatus) => {
     if (!lead || pipelineUpdating) return
 
-    const currentStatus = String(lead.status || "NEW").toUpperCase()
+    const currentStatus = String(
+      lead.status || "NEW"
+    ).toUpperCase()
 
     if (currentStatus === nextStatus) return
+
+    // Conversion requires deal details.
+    if (nextStatus === "CONVERTED") {
+      openConversionModal()
+      return
+    }
+
+    // Lost requires a reason/details.
+    if (nextStatus === "LOST") {
+      openLostModal()
+      return
+    }
 
     try {
       setPipelineUpdating(true)
       setPipelineError("")
       setPipelineSuccess("")
 
-      const updatedLead = await updateLead(lead.id, {
-        status: nextStatus,
-      })
+      const updatedLead = await updateLead(
+        lead.id,
+        {
+          status: nextStatus,
+        }
+      )
 
       setLead(updatedLead)
 
-      const updatedActivities = await getLeadActivities(lead.id)
+      const updatedActivities =
+        await getLeadActivities(lead.id)
+
       setActivities(updatedActivities)
 
       setPipelineSuccess(
-        `Lead moved to ${formatPipelineStage(nextStatus)}.`
+        `Lead moved to ${formatPipelineStage(
+          nextStatus
+        )}.`
       )
 
       setTimeout(() => {
         setPipelineSuccess("")
       }, 2500)
     } catch (error) {
-      console.error("Failed to update sales pipeline:", error)
+      console.error(
+        "Failed to update sales pipeline:",
+        error
+      )
 
       setPipelineError(
         error.response?.data?.detail ||
@@ -449,7 +817,6 @@ function LeadDetails() {
         await getLeadActivities(lead.id)
 
       setActivities(updatedActivities)
-
     } catch (error) {
       console.error(
         "Failed to record WhatsApp activity:",
@@ -478,7 +845,6 @@ function LeadDetails() {
       )
 
       setGeneratedMessage(data)
-
     } catch (error) {
       console.error(
         "Failed to generate AI message:",
@@ -489,7 +855,6 @@ function LeadDetails() {
         error.response?.data?.detail ||
           "Failed to generate AI message."
       )
-
     } finally {
       setMessageLoading(false)
     }
@@ -513,7 +878,6 @@ function LeadDetails() {
       setTimeout(() => {
         setMessageCopied(false)
       }, 2000)
-
     } catch (error) {
       console.error(
         "Failed to copy generated message:",
@@ -551,7 +915,9 @@ function LeadDetails() {
       setFollowUpError(
         "Please provide a scheduled date/time and action."
       )
+
       setFollowUpSuccess("")
+
       return
     }
 
@@ -568,11 +934,13 @@ function LeadDetails() {
         followUpForm.reason.trim()
       )
 
-      const [updatedFollowUps, updatedActivities] =
-        await Promise.all([
-          getLeadFollowUps(id),
-          getLeadActivities(id),
-        ])
+      const [
+        updatedFollowUps,
+        updatedActivities,
+      ] = await Promise.all([
+        getLeadFollowUps(id),
+        getLeadActivities(id),
+      ])
 
       setFollowUps(updatedFollowUps)
       setActivities(updatedActivities)
@@ -593,7 +961,6 @@ function LeadDetails() {
       setTimeout(() => {
         setFollowUpSuccess("")
       }, 3000)
-
     } catch (error) {
       console.error(
         "Failed to create follow-up:",
@@ -604,7 +971,6 @@ function LeadDetails() {
         error.response?.data?.detail ||
           "Failed to create follow-up."
       )
-
     } finally {
       setFollowUpLoading(false)
     }
@@ -615,7 +981,9 @@ function LeadDetails() {
   // COMPLETE FOLLOW-UP
   // =========================================================
 
-  const handleCompleteFollowUp = async (followUpId) => {
+  const handleCompleteFollowUp = async (
+    followUpId
+  ) => {
     try {
       setCompletingFollowUpId(followUpId)
       setFollowUpError("")
@@ -651,7 +1019,6 @@ function LeadDetails() {
       setTimeout(() => {
         setFollowUpSuccess("")
       }, 3500)
-
     } catch (error) {
       console.error(
         "Failed to complete follow-up:",
@@ -662,7 +1029,6 @@ function LeadDetails() {
         error.response?.data?.detail ||
           "Failed to complete follow-up."
       )
-
     } finally {
       setCompletingFollowUpId(null)
     }
@@ -692,7 +1058,6 @@ function LeadDetails() {
         setActivities(activitiesData)
         setFollowUps(followUpsData)
         setNextAction(nextActionData)
-
       } catch (error) {
         console.error(
           "Failed to load lead details:",
@@ -725,7 +1090,6 @@ function LeadDetails() {
       setTimeout(() => {
         setCopied(false)
       }, 2000)
-
     } catch (error) {
       console.error(
         "Failed to copy WhatsApp message:",
@@ -750,6 +1114,11 @@ function LeadDetails() {
       </div>
     )
   }
+
+
+  const currentPipelineStatus = String(
+    lead.status || "NEW"
+  ).toUpperCase()
 
 
   // =========================================================
@@ -790,8 +1159,6 @@ function LeadDetails() {
 
             <div className="flex flex-wrap items-center gap-3">
 
-              {/* EDIT BUTTON */}
-
               <button
                 onClick={startEditing}
                 className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
@@ -800,14 +1167,10 @@ function LeadDetails() {
               </button>
 
 
-              {/* STATUS */}
-
               <span className="rounded-full bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-700">
                 {lead.status || "NEW"}
               </span>
 
-
-              {/* TEMPERATURE */}
 
               {lead.temperature && (
                 <span
@@ -866,8 +1229,6 @@ function LeadDetails() {
               className="grid gap-4 md:grid-cols-2 lg:grid-cols-3"
             >
 
-              {/* NAME */}
-
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">
                   Name
@@ -882,8 +1243,6 @@ function LeadDetails() {
                 />
               </div>
 
-
-              {/* EMAIL */}
 
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">
@@ -901,8 +1260,6 @@ function LeadDetails() {
               </div>
 
 
-              {/* SOURCE */}
-
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">
                   Source
@@ -917,8 +1274,6 @@ function LeadDetails() {
                 />
               </div>
 
-
-              {/* STATUS */}
 
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">
@@ -943,8 +1298,6 @@ function LeadDetails() {
               </div>
 
 
-              {/* TEMPERATURE */}
-
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">
                   Temperature
@@ -964,8 +1317,6 @@ function LeadDetails() {
               </div>
 
 
-              {/* NOTES */}
-
               <div className="md:col-span-2 lg:col-span-3">
                 <label className="mb-1 block text-sm font-medium text-slate-700">
                   Sales Notes
@@ -981,8 +1332,6 @@ function LeadDetails() {
                 />
               </div>
 
-
-              {/* ACTION BUTTONS */}
 
               <div className="flex flex-wrap gap-3 md:col-span-2 lg:col-span-3">
 
@@ -1031,19 +1380,26 @@ function LeadDetails() {
         <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
 
           <div className="mb-5 flex flex-col justify-between gap-3 md:flex-row md:items-center">
+
             <div>
               <h2 className="text-lg font-semibold text-slate-900">
                 Sales Pipeline
               </h2>
+
               <p className="mt-1 text-sm text-slate-500">
                 Move this lead through the sales journey. Each change is recorded in the activity timeline.
               </p>
             </div>
 
             <span className="w-fit rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">
-              Current: {formatPipelineStage(lead.status)}
+              Current:{" "}
+              {formatPipelineStage(
+                lead.status
+              )}
             </span>
+
           </div>
+
 
           {pipelineError && (
             <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
@@ -1053,6 +1409,7 @@ function LeadDetails() {
             </div>
           )}
 
+
           {pipelineSuccess && (
             <div className="mb-4 rounded-xl border border-green-200 bg-green-50 px-4 py-3">
               <p className="text-sm font-medium text-green-700">
@@ -1061,61 +1418,304 @@ function LeadDetails() {
             </div>
           )}
 
+
           <div className="overflow-x-auto pb-2">
+
             <div className="flex min-w-max items-center gap-2">
-              {SALES_PIPELINE_STAGES.map((stage, index) => {
-                const currentStage = String(lead.status || "NEW").toUpperCase()
-                const isCurrent = currentStage === stage
-                const isCompleted =
-                  SALES_PIPELINE_STAGES.indexOf(currentStage) >= index &&
-                  currentStage !== "LOST"
 
-                return (
-                  <div key={stage} className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handlePipelineChange(stage)}
-                      disabled={pipelineUpdating || isCurrent}
-                      className={`rounded-xl border px-4 py-3 text-sm font-semibold transition ${
-                        isCurrent
-                          ? "border-blue-600 bg-blue-600 text-white shadow-sm"
-                          : isCompleted
-                            ? "border-blue-200 bg-blue-50 text-blue-700 hover:border-blue-300"
-                            : "border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:bg-blue-50"
-                      } disabled:cursor-not-allowed disabled:opacity-60`}
+              {SALES_PIPELINE_STAGES.map(
+                (stage, index) => {
+
+                  const isCurrent =
+                    currentPipelineStatus ===
+                    stage
+
+                  const isCompleted =
+                    SALES_PIPELINE_STAGES.indexOf(
+                      currentPipelineStatus
+                    ) >= index &&
+                    currentPipelineStatus !==
+                      "LOST"
+
+                  return (
+                    <div
+                      key={stage}
+                      className="flex items-center gap-2"
                     >
-                      {formatPipelineStage(stage)}
-                    </button>
 
-                    {index < SALES_PIPELINE_STAGES.length - 1 && (
-                      <span className="text-slate-300">→</span>
-                    )}
-                  </div>
-                )
-              })}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handlePipelineChange(
+                            stage
+                          )
+                        }
+                        disabled={
+                          pipelineUpdating ||
+                          isCurrent
+                        }
+                        className={`rounded-xl border px-4 py-3 text-sm font-semibold transition ${
+                          isCurrent
+                            ? "border-blue-600 bg-blue-600 text-white shadow-sm"
+                            : isCompleted
+                              ? "border-blue-200 bg-blue-50 text-blue-700 hover:border-blue-300"
+                              : "border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:bg-blue-50"
+                        } disabled:cursor-not-allowed disabled:opacity-60`}
+                      >
+                        {formatPipelineStage(
+                          stage
+                        )}
+                      </button>
+
+
+                      {index <
+                        SALES_PIPELINE_STAGES.length -
+                          1 && (
+                        <span className="text-slate-300">
+                          →
+                        </span>
+                      )}
+
+                    </div>
+                  )
+                }
+              )}
+
             </div>
+
           </div>
 
+
           <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-5">
+
             <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
               Other outcome
             </span>
 
+
             <button
               type="button"
-              onClick={() => handlePipelineChange("LOST")}
-              disabled={pipelineUpdating || String(lead.status || "NEW").toUpperCase() === "LOST"}
+              onClick={() =>
+                handlePipelineChange("LOST")
+              }
+              disabled={
+                pipelineUpdating ||
+                currentPipelineStatus ===
+                  "LOST"
+              }
               className={`rounded-lg border px-4 py-2 text-sm font-semibold transition ${
-                String(lead.status || "NEW").toUpperCase() === "LOST"
+                currentPipelineStatus ===
+                "LOST"
                   ? "border-red-500 bg-red-500 text-white"
                   : "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
               } disabled:cursor-not-allowed disabled:opacity-60`}
             >
               Mark as Lost
             </button>
+
+
+            {currentPipelineStatus ===
+              "NEGOTIATION" && (
+              <button
+                type="button"
+                onClick={openConversionModal}
+                className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-2 text-sm font-semibold text-green-700 transition hover:bg-green-100"
+              >
+                <CheckCircle2 size={16} />
+                Convert Lead
+              </button>
+            )}
+
           </div>
 
         </section>
+
+
+        {/* ================================================= */}
+        {/* CONVERSION / LOST SUMMARY */}
+        {/* ================================================= */}
+
+        {(currentPipelineStatus ===
+          "CONVERTED" ||
+          currentPipelineStatus ===
+            "LOST") && (
+
+          <section className="rounded-2xl border bg-white p-6 shadow-sm">
+
+            {currentPipelineStatus ===
+              "CONVERTED" ? (
+
+              <div>
+
+                <div className="mb-5 flex items-center gap-3">
+
+                  <div className="rounded-xl bg-green-100 p-2.5 text-green-700">
+                    <CheckCircle2 size={22} />
+                  </div>
+
+                  <div>
+                    <h2 className="text-lg font-semibold text-slate-900">
+                      Conversion Details
+                    </h2>
+
+                    <p className="text-sm text-slate-500">
+                      This lead has been converted successfully.
+                    </p>
+                  </div>
+
+                </div>
+
+
+                <div className="grid gap-4 md:grid-cols-3">
+
+                  <div className="rounded-xl bg-green-50 p-4">
+
+                    <p className="text-xs font-semibold uppercase tracking-wide text-green-600">
+                      Deal Value
+                    </p>
+
+                    <p className="mt-2 text-xl font-bold text-green-800">
+                      {lead.deal_value
+                        ? `₹${Number(
+                            lead.deal_value
+                          ).toLocaleString(
+                            "en-IN"
+                          )}`
+                        : "-"}
+                    </p>
+
+                  </div>
+
+
+                  <div className="rounded-xl bg-slate-50 p-4">
+
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Conversion Date
+                    </p>
+
+                    <p className="mt-2 text-sm font-semibold text-slate-800">
+                      {lead.conversion_date
+                        ? formatActivityDate(
+                            lead.conversion_date
+                          )
+                        : "-"}
+                    </p>
+
+                  </div>
+
+
+                  <div className="rounded-xl bg-slate-50 p-4">
+
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Notes
+                    </p>
+
+                    <p className="mt-2 text-sm leading-6 text-slate-700">
+                      {lead.conversion_notes ||
+                        "-"}
+                    </p>
+
+                  </div>
+
+                </div>
+
+
+                <button
+                  type="button"
+                  onClick={openConversionModal}
+                  className="mt-5 rounded-lg border border-green-200 bg-white px-4 py-2 text-sm font-semibold text-green-700 transition hover:bg-green-50"
+                >
+                  Edit Conversion Details
+                </button>
+
+              </div>
+
+            ) : (
+
+              <div>
+
+                <div className="mb-5 flex items-center gap-3">
+
+                  <div className="rounded-xl bg-red-100 p-2.5 text-red-700">
+                    <XCircle size={22} />
+                  </div>
+
+                  <div>
+                    <h2 className="text-lg font-semibold text-slate-900">
+                      Lost Lead Details
+                    </h2>
+
+                    <p className="text-sm text-slate-500">
+                      This lead has been marked as lost.
+                    </p>
+                  </div>
+
+                </div>
+
+
+                <div className="grid gap-4 md:grid-cols-3">
+
+                  <div className="rounded-xl bg-red-50 p-4">
+
+                    <p className="text-xs font-semibold uppercase tracking-wide text-red-600">
+                      Lost Reason
+                    </p>
+
+                    <p className="mt-2 text-sm font-semibold text-red-800">
+                      {lead.lost_reason ||
+                        "-"}
+                    </p>
+
+                  </div>
+
+
+                  <div className="rounded-xl bg-slate-50 p-4">
+
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Lost Date
+                    </p>
+
+                    <p className="mt-2 text-sm font-semibold text-slate-800">
+                      {lead.lost_date
+                        ? formatActivityDate(
+                            lead.lost_date
+                          )
+                        : "-"}
+                    </p>
+
+                  </div>
+
+
+                  <div className="rounded-xl bg-slate-50 p-4">
+
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Notes
+                    </p>
+
+                    <p className="mt-2 text-sm leading-6 text-slate-700">
+                      {lead.lost_notes ||
+                        "-"}
+                    </p>
+
+                  </div>
+
+                </div>
+
+
+                <button
+                  type="button"
+                  onClick={openLostModal}
+                  className="mt-5 rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50"
+                >
+                  Edit Lost Details
+                </button>
+
+              </div>
+
+            )}
+
+          </section>
+        )}
 
 
         {/* ================================================= */}
@@ -1131,8 +1731,6 @@ function LeadDetails() {
         )}
 
 
-        {/* FOLLOW-UP SUCCESS */}
-
         {followUpSuccess && (
           <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3">
             <p className="text-sm font-medium text-green-700">
@@ -1141,8 +1739,6 @@ function LeadDetails() {
           </div>
         )}
 
-
-        {/* FOLLOW-UP ERROR */}
 
         {followUpError && (
           <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
@@ -1158,9 +1754,6 @@ function LeadDetails() {
         {/* ================================================= */}
 
         <div className="grid gap-6 lg:grid-cols-3">
-
-
-          {/* LEAD INFORMATION */}
 
           <div className="rounded-xl bg-white p-6 shadow-sm">
 
@@ -1205,8 +1798,6 @@ function LeadDetails() {
           </div>
 
 
-          {/* PROPERTY REQUIREMENTS */}
-
           <div className="rounded-xl bg-white p-6 shadow-sm">
 
             <h2 className="mb-4 text-lg font-semibold text-slate-900">
@@ -1235,7 +1826,9 @@ function LeadDetails() {
                 {lead.budget_max
                   ? `₹${Number(
                       lead.budget_max
-                    ).toLocaleString("en-IN")}`
+                    ).toLocaleString(
+                      "en-IN"
+                    )}`
                   : "-"}
               </p>
 
@@ -1254,14 +1847,18 @@ function LeadDetails() {
                 {lead.down_payment
                   ? `₹${Number(
                       lead.down_payment
-                    ).toLocaleString("en-IN")}`
+                    ).toLocaleString(
+                      "en-IN"
+                    )}`
                   : "-"}
               </p>
 
               <p>
                 <strong>Financing:</strong>{" "}
-                {lead.financing_required === null ||
-                lead.financing_required === undefined
+                {lead.financing_required ===
+                  null ||
+                lead.financing_required ===
+                  undefined
                   ? "-"
                   : lead.financing_required
                     ? "Required"
@@ -1272,8 +1869,6 @@ function LeadDetails() {
 
           </div>
 
-
-          {/* NEXT BEST ACTION */}
 
           <div className="rounded-xl bg-white p-6 shadow-sm">
 
@@ -1291,7 +1886,8 @@ function LeadDetails() {
                   </p>
 
                   <p className="mt-1 font-semibold text-slate-900">
-                    {nextAction.priority || "-"}
+                    {nextAction.priority ||
+                      "-"}
                   </p>
                 </div>
 
@@ -1302,7 +1898,8 @@ function LeadDetails() {
                   </p>
 
                   <p className="mt-1 text-sm text-slate-700">
-                    {nextAction.action || "-"}
+                    {nextAction.action ||
+                      "-"}
                   </p>
                 </div>
 
@@ -1313,7 +1910,8 @@ function LeadDetails() {
                   </p>
 
                   <p className="mt-1 text-sm font-medium text-slate-700">
-                    {nextAction.channel || "-"}
+                    {nextAction.channel ||
+                      "-"}
                   </p>
                 </div>
 
@@ -1344,9 +1942,6 @@ function LeadDetails() {
         {/* ================================================= */}
 
         <div className="overflow-hidden rounded-2xl border border-violet-200 bg-white shadow-sm">
-
-
-          {/* COPILOT HEADER */}
 
           <div className="bg-gradient-to-r from-violet-600 to-indigo-600 px-6 py-5 text-white">
 
@@ -1397,8 +1992,6 @@ function LeadDetails() {
           </div>
 
 
-          {/* COPILOT CONTENT */}
-
           <div className="p-6">
 
             {copilotLoading ? (
@@ -1420,9 +2013,6 @@ function LeadDetails() {
 
               <div className="space-y-6">
 
-
-                {/* SUMMARY */}
-
                 <div>
 
                   <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-400">
@@ -1436,8 +2026,6 @@ function LeadDetails() {
                 </div>
 
 
-                {/* PRIORITY */}
-
                 <div>
 
                   <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-400">
@@ -1446,20 +2034,21 @@ function LeadDetails() {
 
                   <span
                     className={`inline-flex rounded-full px-3 py-1 text-sm font-semibold ${
-                      copilot.priority === "HIGH"
+                      copilot.priority ===
+                      "HIGH"
                         ? "bg-red-100 text-red-700"
-                        : copilot.priority === "MEDIUM"
+                        : copilot.priority ===
+                            "MEDIUM"
                           ? "bg-orange-100 text-orange-700"
                           : "bg-slate-100 text-slate-700"
                     }`}
                   >
-                    {copilot.priority || "NORMAL"}
+                    {copilot.priority ||
+                      "NORMAL"}
                   </span>
 
                 </div>
 
-
-                {/* TALKING POINTS */}
 
                 <div>
 
@@ -1495,8 +2084,6 @@ function LeadDetails() {
                 </div>
 
 
-                {/* SALES STRATEGY */}
-
                 <div>
 
                   <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-400">
@@ -1506,15 +2093,14 @@ function LeadDetails() {
                   <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-4">
 
                     <p className="text-sm leading-6 text-indigo-950">
-                      {copilot.sales_strategy || "-"}
+                      {copilot.sales_strategy ||
+                        "-"}
                     </p>
 
                   </div>
 
                 </div>
 
-
-                {/* WHATSAPP MESSAGE */}
 
                 <div>
 
@@ -1527,10 +2113,10 @@ function LeadDetails() {
 
                     <div className="flex flex-wrap gap-2">
 
-                      {/* COPY */}
-
                       <button
-                        onClick={copyWhatsAppMessage}
+                        onClick={
+                          copyWhatsAppMessage
+                        }
                         className="flex items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
                       >
 
@@ -1548,8 +2134,6 @@ function LeadDetails() {
 
                       </button>
 
-
-                      {/* OPEN WHATSAPP */}
 
                       <button
                         onClick={() =>
@@ -1581,7 +2165,8 @@ function LeadDetails() {
                     </div>
 
                     <p className="whitespace-pre-line text-sm leading-7 text-slate-700">
-                      {copilot.whatsapp_message || "-"}
+                      {copilot.whatsapp_message ||
+                        "-"}
                     </p>
 
                   </div>
@@ -1625,9 +2210,6 @@ function LeadDetails() {
 
         <div className="overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-sm">
 
-
-          {/* HEADER */}
-
           <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-5 text-white">
 
             <div className="flex items-center gap-3">
@@ -1653,14 +2235,9 @@ function LeadDetails() {
           </div>
 
 
-          {/* GENERATOR CONTENT */}
-
           <div className="p-6">
 
             <div className="grid gap-6 lg:grid-cols-3">
-
-
-              {/* MESSAGE TYPE */}
 
               <div className="lg:col-span-1">
 
@@ -1671,27 +2248,33 @@ function LeadDetails() {
                 <select
                   value={messageType}
                   onChange={(event) =>
-                    setMessageType(event.target.value)
+                    setMessageType(
+                      event.target.value
+                    )
                   }
                   className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
                 >
 
-                  {MESSAGE_TYPES.map((type) => (
+                  {MESSAGE_TYPES.map(
+                    (type) => (
 
-                    <option
-                      key={type.value}
-                      value={type.value}
-                    >
-                      {type.label}
-                    </option>
+                      <option
+                        key={type.value}
+                        value={type.value}
+                      >
+                        {type.label}
+                      </option>
 
-                  ))}
+                    )
+                  )}
 
                 </select>
 
 
                 <button
-                  onClick={handleGenerateMessage}
+                  onClick={
+                    handleGenerateMessage
+                  }
                   disabled={messageLoading}
                   className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
@@ -1727,32 +2310,31 @@ function LeadDetails() {
               </div>
 
 
-              {/* GENERATED MESSAGE */}
-
               <div className="lg:col-span-2">
 
-                {!generatedMessage && !messageLoading && (
-                  <div className="flex min-h-[220px] items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50">
+                {!generatedMessage &&
+                  !messageLoading && (
+                    <div className="flex min-h-[220px] items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50">
 
-                    <div className="text-center">
+                      <div className="text-center">
 
-                      <MessageCircle
-                        size={32}
-                        className="mx-auto mb-3 text-slate-300"
-                      />
+                        <MessageCircle
+                          size={32}
+                          className="mx-auto mb-3 text-slate-300"
+                        />
 
-                      <p className="text-sm font-medium text-slate-500">
-                        Your AI-generated message will appear here
-                      </p>
+                        <p className="text-sm font-medium text-slate-500">
+                          Your AI-generated message will appear here
+                        </p>
 
-                      <p className="mt-1 text-xs text-slate-400">
-                        Select a message type and click Generate
-                      </p>
+                        <p className="mt-1 text-xs text-slate-400">
+                          Select a message type and click Generate
+                        </p>
+
+                      </div>
 
                     </div>
-
-                  </div>
-                )}
+                  )}
 
 
                 {messageLoading && (
@@ -1775,102 +2357,114 @@ function LeadDetails() {
                 )}
 
 
-                {generatedMessage && !messageLoading && (
-                  <div className="rounded-xl border border-green-200 bg-green-50 p-5">
+                {generatedMessage &&
+                  !messageLoading && (
+                    <div className="rounded-xl border border-green-200 bg-green-50 p-5">
 
-                    <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+                      <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
 
-                      <div>
+                        <div>
 
-                        <div className="flex items-center gap-2 text-green-700">
+                          <div className="flex items-center gap-2 text-green-700">
 
-                          <MessageCircle size={19} />
+                            <MessageCircle
+                              size={19}
+                            />
 
-                          <span className="text-sm font-semibold">
-                            {generatedMessage.message_type ||
-                              "WhatsApp Message"}
-                          </span>
+                            <span className="text-sm font-semibold">
+                              {generatedMessage.message_type ||
+                                "WhatsApp Message"}
+                            </span>
+
+                          </div>
+
+
+                          {generatedMessage.subject && (
+                            <p className="mt-1 text-xs text-slate-500">
+                              {
+                                generatedMessage.subject
+                              }
+                            </p>
+                          )}
 
                         </div>
 
 
-                        {generatedMessage.subject && (
-                          <p className="mt-1 text-xs text-slate-500">
-                            {generatedMessage.subject}
+                        <div className="flex flex-wrap gap-2">
+
+                          <button
+                            onClick={
+                              copyGeneratedMessage
+                            }
+                            className="flex items-center justify-center gap-2 rounded-lg border border-green-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-green-50"
+                          >
+
+                            {messageCopied ? (
+                              <>
+                                <Check
+                                  size={16}
+                                />
+                                Copied
+                              </>
+                            ) : (
+                              <>
+                                <Copy
+                                  size={16}
+                                />
+                                Copy Message
+                              </>
+                            )}
+
+                          </button>
+
+
+                          <button
+                            onClick={() =>
+                              openWhatsApp(
+                                generatedMessage.message
+                              )
+                            }
+                            className="flex items-center justify-center gap-2 rounded-lg bg-green-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-green-700"
+                          >
+                            <MessageCircle
+                              size={16}
+                            />
+                            Open WhatsApp
+                          </button>
+
+                        </div>
+
+                      </div>
+
+
+                      <div className="rounded-xl border border-green-100 bg-white p-5">
+
+                        <p className="whitespace-pre-line text-sm leading-7 text-slate-700">
+                          {generatedMessage.message ||
+                            "-"}
+                        </p>
+
+                      </div>
+
+
+                      {generatedMessage.sales_note && (
+                        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
+
+                          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-amber-600">
+                            Salesperson Note
                           </p>
-                        )}
 
-                      </div>
+                          <p className="text-sm leading-6 text-amber-900">
+                            {
+                              generatedMessage.sales_note
+                            }
+                          </p>
 
-
-                      <div className="flex flex-wrap gap-2">
-
-                        {/* COPY GENERATED MESSAGE */}
-
-                        <button
-                          onClick={copyGeneratedMessage}
-                          className="flex items-center justify-center gap-2 rounded-lg border border-green-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-green-50"
-                        >
-
-                          {messageCopied ? (
-                            <>
-                              <Check size={16} />
-                              Copied
-                            </>
-                          ) : (
-                            <>
-                              <Copy size={16} />
-                              Copy Message
-                            </>
-                          )}
-
-                        </button>
-
-
-                        {/* OPEN WHATSAPP */}
-
-                        <button
-                          onClick={() =>
-                            openWhatsApp(
-                              generatedMessage.message
-                            )
-                          }
-                          className="flex items-center justify-center gap-2 rounded-lg bg-green-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-green-700"
-                        >
-                          <MessageCircle size={16} />
-                          Open WhatsApp
-                        </button>
-
-                      </div>
+                        </div>
+                      )}
 
                     </div>
-
-
-                    <div className="rounded-xl border border-green-100 bg-white p-5">
-
-                      <p className="whitespace-pre-line text-sm leading-7 text-slate-700">
-                        {generatedMessage.message || "-"}
-                      </p>
-
-                    </div>
-
-
-                    {generatedMessage.sales_note && (
-                      <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
-
-                        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-amber-600">
-                          Salesperson Note
-                        </p>
-
-                        <p className="text-sm leading-6 text-amber-900">
-                          {generatedMessage.sales_note}
-                        </p>
-
-                      </div>
-                    )}
-
-                  </div>
-                )}
+                  )}
 
               </div>
 
@@ -1887,9 +2481,6 @@ function LeadDetails() {
 
         <div className="grid gap-6 lg:grid-cols-3">
 
-
-          {/* AI QUALIFICATION */}
-
           <div className="rounded-xl bg-white p-6 shadow-sm lg:col-span-2">
 
             <h2 className="mb-4 text-lg font-semibold text-slate-900">
@@ -1904,13 +2495,12 @@ function LeadDetails() {
           </div>
 
 
-          {/* FOLLOW UPS */}
-
           <div className="rounded-xl bg-white p-6 shadow-sm">
 
             <div className="mb-4 flex items-center justify-between gap-3">
 
               <div>
+
                 <h2 className="text-lg font-semibold text-slate-900">
                   Follow-ups
                 </h2>
@@ -1918,12 +2508,17 @@ function LeadDetails() {
                 <p className="mt-1 text-xs text-slate-500">
                   Manage scheduled sales tasks
                 </p>
+
               </div>
+
 
               <button
                 type="button"
                 onClick={() => {
-                  setShowFollowUpForm((current) => !current)
+                  setShowFollowUpForm(
+                    (current) => !current
+                  )
+
                   setFollowUpError("")
                   setFollowUpSuccess("")
                 }}
@@ -1937,12 +2532,12 @@ function LeadDetails() {
             </div>
 
 
-            {/* MANUAL FOLLOW-UP FORM */}
-
             {showFollowUpForm && (
 
               <form
-                onSubmit={handleCreateManualFollowUp}
+                onSubmit={
+                  handleCreateManualFollowUp
+                }
                 className="mb-5 rounded-xl border border-blue-100 bg-blue-50 p-4"
               >
 
@@ -1959,8 +2554,6 @@ function LeadDetails() {
                 </div>
 
 
-                {/* TASK TYPE */}
-
                 <div className="mb-3">
 
                   <label className="mb-1 block text-xs font-semibold text-slate-700">
@@ -1969,10 +2562,15 @@ function LeadDetails() {
 
                   <select
                     name="follow_up_type"
-                    value={followUpForm.follow_up_type}
-                    onChange={handleFollowUpFormChange}
+                    value={
+                      followUpForm.follow_up_type
+                    }
+                    onChange={
+                      handleFollowUpFormChange
+                    }
                     className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                   >
+
                     <option value="CALL">
                       Call
                     </option>
@@ -1992,12 +2590,11 @@ function LeadDetails() {
                     <option value="OTHER">
                       Other
                     </option>
+
                   </select>
 
                 </div>
 
-
-                {/* DATE AND TIME */}
 
                 <div className="mb-3">
 
@@ -2008,15 +2605,17 @@ function LeadDetails() {
                   <input
                     type="datetime-local"
                     name="scheduled_at"
-                    value={followUpForm.scheduled_at}
-                    onChange={handleFollowUpFormChange}
+                    value={
+                      followUpForm.scheduled_at
+                    }
+                    onChange={
+                      handleFollowUpFormChange
+                    }
                     className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                   />
 
                 </div>
 
-
-                {/* ACTION */}
 
                 <div className="mb-3">
 
@@ -2027,16 +2626,18 @@ function LeadDetails() {
                   <input
                     type="text"
                     name="action"
-                    value={followUpForm.action}
-                    onChange={handleFollowUpFormChange}
+                    value={
+                      followUpForm.action
+                    }
+                    onChange={
+                      handleFollowUpFormChange
+                    }
                     placeholder="e.g. Call customer about 2BHK options"
                     className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                   />
 
                 </div>
 
-
-                {/* REASON */}
 
                 <div className="mb-4">
 
@@ -2046,8 +2647,12 @@ function LeadDetails() {
 
                   <textarea
                     name="reason"
-                    value={followUpForm.reason}
-                    onChange={handleFollowUpFormChange}
+                    value={
+                      followUpForm.reason
+                    }
+                    onChange={
+                      handleFollowUpFormChange
+                    }
                     rows={3}
                     placeholder="Optional notes for this task..."
                     className="w-full resize-none rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
@@ -2060,7 +2665,9 @@ function LeadDetails() {
 
                   <button
                     type="submit"
-                    disabled={followUpLoading}
+                    disabled={
+                      followUpLoading
+                    }
                     className="flex-1 rounded-lg bg-blue-600 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {followUpLoading
@@ -2068,10 +2675,14 @@ function LeadDetails() {
                       : "Create Task"}
                   </button>
 
+
                   <button
                     type="button"
                     onClick={() => {
-                      setShowFollowUpForm(false)
+                      setShowFollowUpForm(
+                        false
+                      )
+
                       setFollowUpError("")
                     }}
                     className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
@@ -2084,8 +2695,6 @@ function LeadDetails() {
               </form>
             )}
 
-
-            {/* FOLLOW-UP LIST */}
 
             <div className="space-y-4">
 
@@ -2105,127 +2714,135 @@ function LeadDetails() {
 
               ) : (
 
-                followUps.map((followUp) => {
+                followUps.map(
+                  (followUp) => {
 
-                  const status =
-                    getFollowUpStatus(followUp)
+                    const status =
+                      getFollowUpStatus(
+                        followUp
+                      )
 
-                  return (
+                    return (
 
-                    <div
-                      key={followUp.id}
-                      className={`rounded-xl border p-4 ${
-                        status === "OVERDUE"
-                          ? "border-red-200 bg-red-50"
-                          : status === "COMPLETED"
-                            ? "border-slate-200 bg-slate-50"
-                            : "border-blue-100 bg-blue-50/40"
-                      }`}
-                    >
+                      <div
+                        key={followUp.id}
+                        className={`rounded-xl border p-4 ${
+                          status ===
+                          "OVERDUE"
+                            ? "border-red-200 bg-red-50"
+                            : status ===
+                                "COMPLETED"
+                              ? "border-slate-200 bg-slate-50"
+                              : "border-blue-100 bg-blue-50/40"
+                        }`}
+                      >
 
-                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-start justify-between gap-3">
 
-                        <div className="min-w-0">
+                          <div className="min-w-0">
 
-                          <p
-                            className={`font-semibold ${
-                              status === "COMPLETED"
-                                ? "text-slate-500 line-through"
-                                : "text-slate-800"
+                            <p
+                              className={`font-semibold ${
+                                status ===
+                                "COMPLETED"
+                                  ? "text-slate-500 line-through"
+                                  : "text-slate-800"
+                              }`}
+                            >
+                              {
+                                followUp.action
+                              }
+                            </p>
+
+                            <p className="mt-1 text-xs font-medium uppercase tracking-wide text-slate-500">
+                              {
+                                followUp.follow_up_type
+                              }
+                            </p>
+
+                          </div>
+
+
+                          <span
+                            className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${
+                              status ===
+                              "OVERDUE"
+                                ? "bg-red-100 text-red-700"
+                                : status ===
+                                    "COMPLETED"
+                                  ? "bg-slate-200 text-slate-600"
+                                  : "bg-blue-100 text-blue-700"
                             }`}
                           >
-                            {followUp.action}
-                          </p>
+                            {status}
+                          </span>
 
-                          <p className="mt-1 text-xs font-medium uppercase tracking-wide text-slate-500">
-                            {followUp.follow_up_type}
+                        </div>
+
+
+                        <div className="mt-3">
+
+                          <p
+                            className={`text-xs font-medium ${
+                              status ===
+                              "OVERDUE"
+                                ? "text-red-700"
+                                : "text-slate-500"
+                            }`}
+                          >
+                            Scheduled:{" "}
+                            {formatFollowUpDate(
+                              followUp.scheduled_at
+                            )}
                           </p>
 
                         </div>
 
 
-                        {/* STATUS */}
+                        {followUp.reason && (
 
-                        <span
-                          className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${
-                            status === "OVERDUE"
-                              ? "bg-red-100 text-red-700"
-                              : status === "COMPLETED"
-                                ? "bg-slate-200 text-slate-600"
-                                : "bg-blue-100 text-blue-700"
-                          }`}
-                        >
-                          {status}
-                        </span>
+                          <div className="mt-3 border-t border-slate-200/70 pt-3">
 
-                      </div>
+                            <p className="text-xs leading-5 text-slate-500">
+                              {
+                                followUp.reason
+                              }
+                            </p>
+
+                          </div>
+
+                        )}
 
 
-                      {/* SCHEDULED TIME */}
+                        {status !==
+                          "COMPLETED" && (
 
-                      <div className="mt-3">
-
-                        <p
-                          className={`text-xs font-medium ${
-                            status === "OVERDUE"
-                              ? "text-red-700"
-                              : "text-slate-500"
-                          }`}
-                        >
-                          Scheduled:{" "}
-                          {formatFollowUpDate(
-                            followUp.scheduled_at
-                          )}
-                        </p>
-
-                      </div>
-
-
-                      {/* REASON */}
-
-                      {followUp.reason && (
-
-                        <div className="mt-3 border-t border-slate-200/70 pt-3">
-
-                          <p className="text-xs leading-5 text-slate-500">
-                            {followUp.reason}
-                          </p>
-
-                        </div>
-
-                      )}
-
-
-                      {/* COMPLETE BUTTON */}
-
-                      {status !== "COMPLETED" && (
-
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleCompleteFollowUp(
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleCompleteFollowUp(
+                                followUp.id
+                              )
+                            }
+                            disabled={
+                              completingFollowUpId ===
                               followUp.id
-                            )
-                          }
-                          disabled={
-                            completingFollowUpId ===
+                            }
+                            className="mt-4 w-full rounded-lg bg-emerald-600 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {completingFollowUpId ===
                             followUp.id
-                          }
-                          className="mt-4 w-full rounded-lg bg-emerald-600 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {completingFollowUpId ===
-                          followUp.id
-                            ? "Completing..."
-                            : "✓ Complete Follow-up"}
-                        </button>
+                              ? "Completing..."
+                              : "✓ Complete Follow-up"}
+                          </button>
 
-                      )}
+                        )}
 
-                    </div>
+                      </div>
 
-                  )
-
-                })
+                    )
+                  }
+                )
 
               )}
 
@@ -2278,53 +2895,55 @@ function LeadDetails() {
 
             <div className="relative ml-2 border-l border-slate-200">
 
-              {activities.map((activity) => (
+              {activities.map(
+                (activity) => (
 
-                <div
-                  key={activity.id}
-                  className="relative pb-7 pl-8 last:pb-0"
-                >
+                  <div
+                    key={activity.id}
+                    className="relative pb-7 pl-8 last:pb-0"
+                  >
 
-                  {/* TIMELINE DOT */}
-
-                  <div className="absolute -left-[7px] top-1 h-3 w-3 rounded-full bg-blue-600 ring-4 ring-white" />
-
-
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-
-                      <div>
-
-                        <p className="text-sm font-semibold text-slate-900">
-                          {formatActivityType(
-                            activity.activity_type
-                          )}
-                        </p>
+                    <div className="absolute -left-[7px] top-1 h-3 w-3 rounded-full bg-blue-600 ring-4 ring-white" />
 
 
-                        {activity.description && (
-                          <p className="mt-1 text-sm text-slate-600">
-                            {activity.description}
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+
+                        <div>
+
+                          <p className="text-sm font-semibold text-slate-900">
+                            {formatActivityType(
+                              activity.activity_type
+                            )}
                           </p>
-                        )}
+
+
+                          {activity.description && (
+                            <p className="mt-1 text-sm text-slate-600">
+                              {
+                                activity.description
+                              }
+                            </p>
+                          )}
+
+                        </div>
+
+
+                        <span className="text-xs text-slate-400">
+                          {formatActivityDate(
+                            activity.created_at
+                          )}
+                        </span>
 
                       </div>
-
-
-                      <span className="text-xs text-slate-400">
-                        {formatActivityDate(
-                          activity.created_at
-                        )}
-                      </span>
 
                     </div>
 
                   </div>
 
-                </div>
-
-              ))}
+                )
+              )}
 
             </div>
 
@@ -2333,6 +2952,375 @@ function LeadDetails() {
         </div>
 
       </main>
+
+
+      {/* ===================================================== */}
+      {/* CONVERT LEAD MODAL */}
+      {/* ===================================================== */}
+
+      {showConversionModal && (
+
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
+
+          <div className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl">
+
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5">
+
+              <div className="flex items-center gap-3">
+
+                <div className="rounded-xl bg-green-100 p-2.5 text-green-700">
+                  <CheckCircle2 size={22} />
+                </div>
+
+                <div>
+
+                  <h2 className="text-lg font-semibold text-slate-900">
+                    Convert Lead
+                  </h2>
+
+                  <p className="text-sm text-slate-500">
+                    Record the completed deal.
+                  </p>
+
+                </div>
+
+              </div>
+
+
+              <button
+                type="button"
+                onClick={() =>
+                  setShowConversionModal(false)
+                }
+                className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+              >
+                <X size={20} />
+              </button>
+
+            </div>
+
+
+            <form
+              onSubmit={handleConvertLead}
+              className="space-y-5 p-6"
+            >
+
+              {conversionError && (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+                  <p className="text-sm text-red-700">
+                    {conversionError}
+                  </p>
+                </div>
+              )}
+
+
+              <div>
+
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
+                  Conversion Date
+                </label>
+
+                <input
+                  type="datetime-local"
+                  name="conversion_date"
+                  value={
+                    conversionForm.conversion_date
+                  }
+                  onChange={
+                    handleConversionChange
+                  }
+                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100"
+                />
+
+              </div>
+
+
+              <div>
+
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
+                  Deal Value
+                </label>
+
+                <div className="relative">
+
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">
+                    ₹
+                  </span>
+
+                  <input
+                    type="number"
+                    name="deal_value"
+                    value={
+                      conversionForm.deal_value
+                    }
+                    onChange={
+                      handleConversionChange
+                    }
+                    min="0"
+                    step="0.01"
+                    placeholder="Enter final deal value"
+                    className="w-full rounded-xl border border-slate-200 py-3 pl-8 pr-4 text-sm outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100"
+                  />
+
+                </div>
+
+              </div>
+
+
+              <div>
+
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
+                  Conversion Notes
+                </label>
+
+                <textarea
+                  name="conversion_notes"
+                  value={
+                    conversionForm.conversion_notes
+                  }
+                  onChange={
+                    handleConversionChange
+                  }
+                  rows={4}
+                  placeholder="Add important details about the completed deal..."
+                  className="w-full resize-none rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100"
+                />
+
+              </div>
+
+
+              <div className="flex justify-end gap-3 border-t border-slate-100 pt-5">
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShowConversionModal(false)
+                  }
+                  className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+
+
+                <button
+                  type="submit"
+                  disabled={conversionLoading}
+                  className="flex items-center gap-2 rounded-xl bg-green-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+
+                  {conversionLoading ? (
+                    <>
+                      <RefreshCw
+                        size={16}
+                        className="animate-spin"
+                      />
+                      Converting...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2
+                        size={16}
+                      />
+                      Convert Lead
+                    </>
+                  )}
+
+                </button>
+
+              </div>
+
+            </form>
+
+          </div>
+
+        </div>
+      )}
+
+
+      {/* ===================================================== */}
+      {/* LOST LEAD MODAL */}
+      {/* ===================================================== */}
+
+      {showLostModal && (
+
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
+
+          <div className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl">
+
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5">
+
+              <div className="flex items-center gap-3">
+
+                <div className="rounded-xl bg-red-100 p-2.5 text-red-700">
+                  <XCircle size={22} />
+                </div>
+
+                <div>
+
+                  <h2 className="text-lg font-semibold text-slate-900">
+                    Mark Lead as Lost
+                  </h2>
+
+                  <p className="text-sm text-slate-500">
+                    Record why this opportunity was lost.
+                  </p>
+
+                </div>
+
+              </div>
+
+
+              <button
+                type="button"
+                onClick={() =>
+                  setShowLostModal(false)
+                }
+                className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+              >
+                <X size={20} />
+              </button>
+
+            </div>
+
+
+            <form
+              onSubmit={handleMarkLeadLost}
+              className="space-y-5 p-6"
+            >
+
+              {lostError && (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+                  <p className="text-sm text-red-700">
+                    {lostError}
+                  </p>
+                </div>
+              )}
+
+
+              <div>
+
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
+                  Lost Date
+                </label>
+
+                <input
+                  type="datetime-local"
+                  name="lost_date"
+                  value={
+                    lostForm.lost_date
+                  }
+                  onChange={
+                    handleLostChange
+                  }
+                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100"
+                />
+
+              </div>
+
+
+              <div>
+
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
+                  Lost Reason
+                </label>
+
+                <select
+                  name="lost_reason"
+                  value={
+                    lostForm.lost_reason
+                  }
+                  onChange={
+                    handleLostChange
+                  }
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100"
+                >
+
+                  <option value="">
+                    Select reason
+                  </option>
+
+                  {LOST_REASONS.map(
+                    (reason) => (
+                      <option
+                        key={reason}
+                        value={reason}
+                      >
+                        {reason}
+                      </option>
+                    )
+                  )}
+
+                </select>
+
+              </div>
+
+
+              <div>
+
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
+                  Lost Notes
+                </label>
+
+                <textarea
+                  name="lost_notes"
+                  value={
+                    lostForm.lost_notes
+                  }
+                  onChange={
+                    handleLostChange
+                  }
+                  rows={4}
+                  placeholder="Add details about why the opportunity was lost..."
+                  className="w-full resize-none rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100"
+                />
+
+              </div>
+
+
+              <div className="flex justify-end gap-3 border-t border-slate-100 pt-5">
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShowLostModal(false)
+                  }
+                  className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+
+
+                <button
+                  type="submit"
+                  disabled={lostLoading}
+                  className="flex items-center gap-2 rounded-xl bg-red-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+
+                  {lostLoading ? (
+                    <>
+                      <RefreshCw
+                        size={16}
+                        className="animate-spin"
+                      />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <XCircle size={16} />
+                      Mark as Lost
+                    </>
+                  )}
+
+                </button>
+
+              </div>
+
+            </form>
+
+          </div>
+
+        </div>
+      )}
 
     </div>
   )
