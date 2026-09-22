@@ -8,20 +8,21 @@ import {
   Check,
   MessageCircle,
   Send,
-  Phone,
-  CalendarPlus,
 } from "lucide-react"
 
 import {
   getLead,
+  updateLead,
   qualifyLead,
   getLeadActivities,
   getLeadFollowUps,
+  completeFollowUp,
   createManualFollowUp,
   getLeadNextAction,
   getSalesCopilot,
   generateLeadMessage,
   getWhatsAppUrl,
+  createLeadActivity,
 } from "../services/api"
 
 
@@ -57,42 +58,106 @@ const MESSAGE_TYPES = [
 ]
 
 
+const SALES_PIPELINE_STAGES = [
+  "NEW",
+  "QUALIFIED",
+  "CONTACTED",
+  "INTERESTED",
+  "SITE_VISIT",
+  "NEGOTIATION",
+  "CONVERTED",
+]
+
+const formatPipelineStage = (stage) => {
+  if (!stage) return "NEW"
+
+  return stage
+    .replaceAll("_", " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase())
+}
+
 function LeadDetails() {
   const { id } = useParams()
   const navigate = useNavigate()
 
+  // =========================================================
+  // LEAD STATE
+  // =========================================================
+
   const [lead, setLead] = useState(null)
+
+  const [editMode, setEditMode] = useState(false)
+
+  const [editForm, setEditForm] = useState({
+    name: "",
+    email: "",
+    source: "",
+    status: "NEW",
+    temperature: "",
+    notes: "",
+  })
+
+  const [saveLoading, setSaveLoading] = useState(false)
+  const [saveError, setSaveError] = useState("")
+  const [saveSuccess, setSaveSuccess] = useState(false)
+
+  // =========================================================
+  // SALES PIPELINE STATE
+  // =========================================================
+
+  const [pipelineUpdating, setPipelineUpdating] = useState(false)
+  const [pipelineError, setPipelineError] = useState("")
+  const [pipelineSuccess, setPipelineSuccess] = useState("")
+
+  // =========================================================
+  // LEAD INTELLIGENCE STATE
+  // =========================================================
+
   const [activities, setActivities] = useState([])
   const [followUps, setFollowUps] = useState([])
   const [nextAction, setNextAction] = useState(null)
 
-  const [copilot, setCopilot] = useState(null)
-  const [copilotLoading, setCopilotLoading] = useState(false)
-  const [copied, setCopied] = useState(false)
+  // =========================================================
+  // FOLLOW-UP MANAGEMENT STATE
+  // =========================================================
 
-  // AI Message Generator
-  const [messageType, setMessageType] = useState("whatsapp_follow_up")
-  const [generatedMessage, setGeneratedMessage] = useState(null)
-  const [messageLoading, setMessageLoading] = useState(false)
-  const [messageCopied, setMessageCopied] = useState(false)
-  const [messageError, setMessageError] = useState("")
+  const [showFollowUpForm, setShowFollowUpForm] = useState(false)
+  const [followUpLoading, setFollowUpLoading] = useState(false)
+  const [followUpError, setFollowUpError] = useState("")
+  const [followUpSuccess, setFollowUpSuccess] = useState("")
+  const [completingFollowUpId, setCompletingFollowUpId] = useState(null)
 
-  // Quick Sales Action / Follow-up
-  const [showQuickFollowUp, setShowQuickFollowUp] = useState(false)
-  const [quickFollowUpLoading, setQuickFollowUpLoading] = useState(false)
-  const [quickFollowUpError, setQuickFollowUpError] = useState("")
-  const [quickFollowUpSuccess, setQuickFollowUpSuccess] = useState("")
-  const [quickFollowUpForm, setQuickFollowUpForm] = useState({
+  const [followUpForm, setFollowUpForm] = useState({
     follow_up_type: "CALL",
     scheduled_at: "",
     action: "",
     reason: "",
   })
 
+  // =========================================================
+  // SALES COPILOT STATE
+  // =========================================================
 
-  /*
-   * Load AI Sales Copilot
-   */
+  const [copilot, setCopilot] = useState(null)
+  const [copilotLoading, setCopilotLoading] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  // =========================================================
+  // AI MESSAGE GENERATOR STATE
+  // =========================================================
+
+  const [messageType, setMessageType] = useState("whatsapp_follow_up")
+  const [generatedMessage, setGeneratedMessage] = useState(null)
+  const [messageLoading, setMessageLoading] = useState(false)
+  const [messageCopied, setMessageCopied] = useState(false)
+  const [messageError, setMessageError] = useState("")
+
+
+  // =========================================================
+  // LOAD AI SALES COPILOT
+  // =========================================================
+
   const loadSalesCopilot = async () => {
     if (!id) return
 
@@ -109,50 +174,295 @@ function LeadDetails() {
       setCopilotLoading(false)
     }
   }
+
+
+  // =========================================================
+  // FORMAT ACTIVITY TYPE
+  // =========================================================
+
   const formatActivityType = (type) => {
-  if (!type) return "Activity"
+    if (!type) return "Activity"
 
-  return type
-    .replaceAll("_", " ")
-    .toLowerCase()
-    .replace(/\b\w/g, (char) => char.toUpperCase())
-}
-
-const formatActivityDate = (date) => {
-  if (!date) return ""
-
-  const parsedDate = new Date(date)
-
-  if (Number.isNaN(parsedDate.getTime())) {
-    return date
+    return type
+      .replaceAll("_", " ")
+      .toLowerCase()
+      .replace(/\b\w/g, (char) => char.toUpperCase())
   }
 
-  return parsedDate.toLocaleString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  })
-}
-  const openWhatsApp = (message = "") => {
-  if (!lead?.phone) return
 
-  const whatsappUrl = getWhatsAppUrl(
-    lead.phone,
-    message
-  )
+  // =========================================================
+  // FORMAT ACTIVITY DATE
+  // =========================================================
 
-  window.open(
-    whatsappUrl,
-    "_blank",
-    "noopener,noreferrer"
-  )
-}
-  
-  /*
-   * Generate AI Message
-   */
+  const formatActivityDate = (date) => {
+    if (!date) return ""
+
+    const parsedDate = new Date(date)
+
+    if (Number.isNaN(parsedDate.getTime())) {
+      return date
+    }
+
+    return parsedDate.toLocaleString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+  }
+
+
+  // =========================================================
+  // FOLLOW-UP DATE HELPERS
+  // =========================================================
+
+  const getFollowUpDate = (date) => {
+    if (!date) return null
+
+    const parsedDate = new Date(date)
+
+    if (Number.isNaN(parsedDate.getTime())) {
+      return null
+    }
+
+    return parsedDate
+  }
+
+
+  const isFollowUpOverdue = (followUp) => {
+    if (!followUp || followUp.status !== "PENDING") {
+      return false
+    }
+
+    const scheduledDate = getFollowUpDate(followUp.scheduled_at)
+
+    if (!scheduledDate) {
+      return false
+    }
+
+    return scheduledDate.getTime() < Date.now()
+  }
+
+
+  const getFollowUpStatus = (followUp) => {
+    if (followUp.status === "COMPLETED") {
+      return "COMPLETED"
+    }
+
+    if (isFollowUpOverdue(followUp)) {
+      return "OVERDUE"
+    }
+
+    return "PENDING"
+  }
+
+
+  const formatFollowUpDate = (date) => {
+    if (!date) return "Date not set"
+
+    const parsedDate = getFollowUpDate(date)
+
+    if (!parsedDate) {
+      return date
+    }
+
+    return parsedDate.toLocaleString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+  }
+
+
+  // =========================================================
+  // START EDITING
+  // =========================================================
+
+  const startEditing = () => {
+    if (!lead) return
+
+    setEditForm({
+      name: lead.name || "",
+      email: lead.email || "",
+      source: lead.source || "",
+      status: lead.status || "NEW",
+      temperature: lead.temperature || "",
+      notes: lead.notes || "",
+    })
+
+    setSaveError("")
+    setSaveSuccess(false)
+    setEditMode(true)
+  }
+
+
+  // =========================================================
+  // HANDLE EDIT FIELD CHANGE
+  // =========================================================
+
+  const handleEditChange = (event) => {
+    const { name, value } = event.target
+
+    setEditForm((current) => ({
+      ...current,
+      [name]: value,
+    }))
+  }
+
+
+  // =========================================================
+  // SAVE LEAD
+  // =========================================================
+
+  const handleSaveLead = async (event) => {
+    event.preventDefault()
+
+    if (!lead) return
+
+    try {
+      setSaveLoading(true)
+      setSaveError("")
+      setSaveSuccess(false)
+
+      const oldStatus = lead.status
+      const oldTemperature = lead.temperature
+
+      const updatedLead = await updateLead(lead.id, {
+        name: editForm.name,
+        email: editForm.email || null,
+        source: editForm.source || null,
+        status: editForm.status,
+        temperature: editForm.temperature || null,
+        notes: editForm.notes || null,
+      })
+
+      setLead(updatedLead)
+      setEditMode(false)
+      setSaveSuccess(true)
+
+      if (
+        oldStatus !== editForm.status ||
+        oldTemperature !== editForm.temperature
+      ) {
+        try {
+          const updatedActivities = await getLeadActivities(lead.id)
+          setActivities(updatedActivities)
+        } catch (activityError) {
+          console.error(
+            "Failed to refresh activities:",
+            activityError
+          )
+        }
+      }
+
+      setTimeout(() => {
+        setSaveSuccess(false)
+      }, 2500)
+
+    } catch (error) {
+      console.error("Failed to update lead:", error)
+
+      setSaveError(
+        error.response?.data?.detail ||
+          "Failed to update lead."
+      )
+    } finally {
+      setSaveLoading(false)
+    }
+  }
+
+
+  // =========================================================
+  // UPDATE SALES PIPELINE
+  // =========================================================
+
+  const handlePipelineChange = async (nextStatus) => {
+    if (!lead || pipelineUpdating) return
+
+    const currentStatus = String(lead.status || "NEW").toUpperCase()
+
+    if (currentStatus === nextStatus) return
+
+    try {
+      setPipelineUpdating(true)
+      setPipelineError("")
+      setPipelineSuccess("")
+
+      const updatedLead = await updateLead(lead.id, {
+        status: nextStatus,
+      })
+
+      setLead(updatedLead)
+
+      const updatedActivities = await getLeadActivities(lead.id)
+      setActivities(updatedActivities)
+
+      setPipelineSuccess(
+        `Lead moved to ${formatPipelineStage(nextStatus)}.`
+      )
+
+      setTimeout(() => {
+        setPipelineSuccess("")
+      }, 2500)
+    } catch (error) {
+      console.error("Failed to update sales pipeline:", error)
+
+      setPipelineError(
+        error.response?.data?.detail ||
+          "Failed to update sales pipeline."
+      )
+    } finally {
+      setPipelineUpdating(false)
+    }
+  }
+
+
+  // =========================================================
+  // OPEN WHATSAPP
+  // =========================================================
+
+  const openWhatsApp = async (message = "") => {
+    if (!lead?.phone) return
+
+    const whatsappUrl = getWhatsAppUrl(
+      lead.phone,
+      message
+    )
+
+    window.open(
+      whatsappUrl,
+      "_blank",
+      "noopener,noreferrer"
+    )
+
+    try {
+      await createLeadActivity(
+        lead.id,
+        "WHATSAPP_OPENED",
+        "WhatsApp conversation opened from Lead Details."
+      )
+
+      const updatedActivities =
+        await getLeadActivities(lead.id)
+
+      setActivities(updatedActivities)
+
+    } catch (error) {
+      console.error(
+        "Failed to record WhatsApp activity:",
+        error
+      )
+    }
+  }
+
+
+  // =========================================================
+  // GENERATE AI MESSAGE
+  // =========================================================
+
   const handleGenerateMessage = async () => {
     if (!id) return
 
@@ -168,6 +478,7 @@ const formatActivityDate = (date) => {
       )
 
       setGeneratedMessage(data)
+
     } catch (error) {
       console.error(
         "Failed to generate AI message:",
@@ -176,17 +487,19 @@ const formatActivityDate = (date) => {
 
       setMessageError(
         error.response?.data?.detail ||
-        "Failed to generate AI message."
+          "Failed to generate AI message."
       )
+
     } finally {
       setMessageLoading(false)
     }
   }
 
 
-  /*
-   * Copy generated AI message
-   */
+  // =========================================================
+  // COPY GENERATED MESSAGE
+  // =========================================================
+
   const copyGeneratedMessage = async () => {
     if (!generatedMessage?.message) return
 
@@ -200,6 +513,7 @@ const formatActivityDate = (date) => {
       setTimeout(() => {
         setMessageCopied(false)
       }, 2000)
+
     } catch (error) {
       console.error(
         "Failed to copy generated message:",
@@ -209,32 +523,106 @@ const formatActivityDate = (date) => {
   }
 
 
-  /*
-   * Create quick follow-up
-   */
-  const handleQuickFollowUp = async (event) => {
+  // =========================================================
+  // FOLLOW-UP FORM CHANGE
+  // =========================================================
+
+  const handleFollowUpFormChange = (event) => {
+    const { name, value } = event.target
+
+    setFollowUpForm((previous) => ({
+      ...previous,
+      [name]: value,
+    }))
+  }
+
+
+  // =========================================================
+  // CREATE MANUAL FOLLOW-UP
+  // =========================================================
+
+  const handleCreateManualFollowUp = async (event) => {
     event.preventDefault()
 
-    if (!quickFollowUpForm.scheduled_at || !quickFollowUpForm.action.trim()) {
-      setQuickFollowUpError(
+    if (
+      !followUpForm.scheduled_at ||
+      !followUpForm.action.trim()
+    ) {
+      setFollowUpError(
         "Please provide a scheduled date/time and action."
       )
-      setQuickFollowUpSuccess("")
+      setFollowUpSuccess("")
       return
     }
 
     try {
-      setQuickFollowUpLoading(true)
-      setQuickFollowUpError("")
-      setQuickFollowUpSuccess("")
+      setFollowUpLoading(true)
+      setFollowUpError("")
+      setFollowUpSuccess("")
 
       await createManualFollowUp(
         id,
-        quickFollowUpForm.follow_up_type,
-        quickFollowUpForm.scheduled_at,
-        quickFollowUpForm.action.trim(),
-        quickFollowUpForm.reason.trim()
+        followUpForm.follow_up_type,
+        followUpForm.scheduled_at,
+        followUpForm.action.trim(),
+        followUpForm.reason.trim()
       )
+
+      const [updatedFollowUps, updatedActivities] =
+        await Promise.all([
+          getLeadFollowUps(id),
+          getLeadActivities(id),
+        ])
+
+      setFollowUps(updatedFollowUps)
+      setActivities(updatedActivities)
+
+      setFollowUpForm({
+        follow_up_type: "CALL",
+        scheduled_at: "",
+        action: "",
+        reason: "",
+      })
+
+      setShowFollowUpForm(false)
+
+      setFollowUpSuccess(
+        "Follow-up created successfully."
+      )
+
+      setTimeout(() => {
+        setFollowUpSuccess("")
+      }, 3000)
+
+    } catch (error) {
+      console.error(
+        "Failed to create follow-up:",
+        error
+      )
+
+      setFollowUpError(
+        error.response?.data?.detail ||
+          "Failed to create follow-up."
+      )
+
+    } finally {
+      setFollowUpLoading(false)
+    }
+  }
+
+
+  // =========================================================
+  // COMPLETE FOLLOW-UP
+  // =========================================================
+
+  const handleCompleteFollowUp = async (followUpId) => {
+    try {
+      setCompletingFollowUpId(followUpId)
+      setFollowUpError("")
+      setFollowUpSuccess("")
+
+      const result =
+        await completeFollowUp(followUpId)
 
       const [
         updatedFollowUps,
@@ -250,36 +638,41 @@ const formatActivityDate = (date) => {
       setActivities(updatedActivities)
       setNextAction(updatedNextAction)
 
-      setQuickFollowUpForm({
-        follow_up_type: "CALL",
-        scheduled_at: "",
-        action: "",
-        reason: "",
-      })
-
-      setQuickFollowUpSuccess("Follow-up created successfully.")
+      if (result?.next_follow_up) {
+        setFollowUpSuccess(
+          "Follow-up completed. Next follow-up created automatically."
+        )
+      } else {
+        setFollowUpSuccess(
+          "Follow-up completed successfully."
+        )
+      }
 
       setTimeout(() => {
-        setQuickFollowUpSuccess("")
-        setShowQuickFollowUp(false)
-      }, 1200)
+        setFollowUpSuccess("")
+      }, 3500)
 
     } catch (error) {
-      console.error("Failed to create quick follow-up:", error)
-
-      setQuickFollowUpError(
-        error.response?.data?.detail ||
-          "Failed to create follow-up."
+      console.error(
+        "Failed to complete follow-up:",
+        error
       )
+
+      setFollowUpError(
+        error.response?.data?.detail ||
+          "Failed to complete follow-up."
+      )
+
     } finally {
-      setQuickFollowUpLoading(false)
+      setCompletingFollowUpId(null)
     }
   }
 
 
-  /*
-   * Load lead details
-   */
+  // =========================================================
+  // LOAD LEAD DETAILS
+  // =========================================================
+
   useEffect(() => {
     const loadLeadDetails = async () => {
       try {
@@ -315,9 +708,10 @@ const formatActivityDate = (date) => {
   }, [id])
 
 
-  /*
-   * Copy Sales Copilot WhatsApp message
-   */
+  // =========================================================
+  // COPY SALES COPILOT WHATSAPP MESSAGE
+  // =========================================================
+
   const copyWhatsAppMessage = async () => {
     if (!copilot?.whatsapp_message) return
 
@@ -341,9 +735,10 @@ const formatActivityDate = (date) => {
   }
 
 
-  /*
-   * Loading state
-   */
+  // =========================================================
+  // LOADING STATE
+  // =========================================================
+
   if (!lead) {
     return (
       <div className="min-h-screen bg-slate-50 p-8">
@@ -357,10 +752,17 @@ const formatActivityDate = (date) => {
   }
 
 
+  // =========================================================
+  // UI
+  // =========================================================
+
   return (
     <div className="min-h-screen bg-slate-50">
 
-      {/* Header */}
+      {/* ===================================================== */}
+      {/* HEADER */}
+      {/* ===================================================== */}
+
       <header className="border-b bg-white px-8 py-5">
         <div className="mx-auto max-w-7xl">
 
@@ -371,6 +773,7 @@ const formatActivityDate = (date) => {
             <ArrowLeft size={17} />
             Back
           </button>
+
 
           <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
 
@@ -384,11 +787,27 @@ const formatActivityDate = (date) => {
               </p>
             </div>
 
-            <div className="flex items-center gap-3">
+
+            <div className="flex flex-wrap items-center gap-3">
+
+              {/* EDIT BUTTON */}
+
+              <button
+                onClick={startEditing}
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              >
+                Edit Lead
+              </button>
+
+
+              {/* STATUS */}
 
               <span className="rounded-full bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-700">
                 {lead.status || "NEW"}
               </span>
+
+
+              {/* TEMPERATURE */}
 
               {lead.temperature && (
                 <span
@@ -412,12 +831,337 @@ const formatActivityDate = (date) => {
       </header>
 
 
+      {/* ===================================================== */}
+      {/* EDIT LEAD PANEL */}
+      {/* ===================================================== */}
+
+      {editMode && (
+        <div className="border-b border-blue-100 bg-blue-50 px-8 py-6">
+          <div className="mx-auto max-w-7xl">
+
+            <div className="mb-5 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">
+                  Edit Lead
+                </h2>
+
+                <p className="text-sm text-slate-500">
+                  Update salesperson-managed lead information.
+                </p>
+              </div>
+            </div>
+
+
+            {saveError && (
+              <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3">
+                <p className="text-sm text-red-700">
+                  {saveError}
+                </p>
+              </div>
+            )}
+
+
+            <form
+              onSubmit={handleSaveLead}
+              className="grid gap-4 md:grid-cols-2 lg:grid-cols-3"
+            >
+
+              {/* NAME */}
+
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">
+                  Name
+                </label>
+
+                <input
+                  name="name"
+                  value={editForm.name}
+                  onChange={handleEditChange}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  placeholder="Lead name"
+                />
+              </div>
+
+
+              {/* EMAIL */}
+
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">
+                  Email
+                </label>
+
+                <input
+                  type="email"
+                  name="email"
+                  value={editForm.email}
+                  onChange={handleEditChange}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  placeholder="Email address"
+                />
+              </div>
+
+
+              {/* SOURCE */}
+
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">
+                  Source
+                </label>
+
+                <input
+                  name="source"
+                  value={editForm.source}
+                  onChange={handleEditChange}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  placeholder="WEBSITE"
+                />
+              </div>
+
+
+              {/* STATUS */}
+
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">
+                  Status
+                </label>
+
+                <select
+                  name="status"
+                  value={editForm.status}
+                  onChange={handleEditChange}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                >
+                  <option value="NEW">NEW</option>
+                  <option value="CONTACTED">CONTACTED</option>
+                  <option value="QUALIFIED">QUALIFIED</option>
+                  <option value="INTERESTED">INTERESTED</option>
+                  <option value="SITE_VISIT">SITE VISIT</option>
+                  <option value="NEGOTIATION">NEGOTIATION</option>
+                  <option value="CONVERTED">CONVERTED</option>
+                  <option value="LOST">LOST</option>
+                </select>
+              </div>
+
+
+              {/* TEMPERATURE */}
+
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">
+                  Temperature
+                </label>
+
+                <select
+                  name="temperature"
+                  value={editForm.temperature}
+                  onChange={handleEditChange}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                >
+                  <option value="">Not Set</option>
+                  <option value="HOT">HOT</option>
+                  <option value="WARM">WARM</option>
+                  <option value="COLD">COLD</option>
+                </select>
+              </div>
+
+
+              {/* NOTES */}
+
+              <div className="md:col-span-2 lg:col-span-3">
+                <label className="mb-1 block text-sm font-medium text-slate-700">
+                  Sales Notes
+                </label>
+
+                <textarea
+                  name="notes"
+                  value={editForm.notes}
+                  onChange={handleEditChange}
+                  rows={4}
+                  className="w-full resize-none rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  placeholder="Add salesperson notes..."
+                />
+              </div>
+
+
+              {/* ACTION BUTTONS */}
+
+              <div className="flex flex-wrap gap-3 md:col-span-2 lg:col-span-3">
+
+                <button
+                  type="submit"
+                  disabled={saveLoading}
+                  className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {saveLoading
+                    ? "Saving..."
+                    : "Save Changes"}
+                </button>
+
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditMode(false)
+                    setSaveError("")
+                  }}
+                  className="rounded-lg border border-slate-200 bg-white px-5 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+
+              </div>
+
+            </form>
+
+          </div>
+        </div>
+      )}
+
+
+      {/* ===================================================== */}
+      {/* MAIN CONTENT */}
+      {/* ===================================================== */}
+
       <main className="mx-auto max-w-7xl space-y-6 p-8">
 
-        {/* Top Information Cards */}
+
+        {/* ================================================= */}
+        {/* SALES PIPELINE */}
+        {/* ================================================= */}
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+
+          <div className="mb-5 flex flex-col justify-between gap-3 md:flex-row md:items-center">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">
+                Sales Pipeline
+              </h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Move this lead through the sales journey. Each change is recorded in the activity timeline.
+              </p>
+            </div>
+
+            <span className="w-fit rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">
+              Current: {formatPipelineStage(lead.status)}
+            </span>
+          </div>
+
+          {pipelineError && (
+            <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+              <p className="text-sm font-medium text-red-700">
+                {pipelineError}
+              </p>
+            </div>
+          )}
+
+          {pipelineSuccess && (
+            <div className="mb-4 rounded-xl border border-green-200 bg-green-50 px-4 py-3">
+              <p className="text-sm font-medium text-green-700">
+                {pipelineSuccess}
+              </p>
+            </div>
+          )}
+
+          <div className="overflow-x-auto pb-2">
+            <div className="flex min-w-max items-center gap-2">
+              {SALES_PIPELINE_STAGES.map((stage, index) => {
+                const currentStage = String(lead.status || "NEW").toUpperCase()
+                const isCurrent = currentStage === stage
+                const isCompleted =
+                  SALES_PIPELINE_STAGES.indexOf(currentStage) >= index &&
+                  currentStage !== "LOST"
+
+                return (
+                  <div key={stage} className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handlePipelineChange(stage)}
+                      disabled={pipelineUpdating || isCurrent}
+                      className={`rounded-xl border px-4 py-3 text-sm font-semibold transition ${
+                        isCurrent
+                          ? "border-blue-600 bg-blue-600 text-white shadow-sm"
+                          : isCompleted
+                            ? "border-blue-200 bg-blue-50 text-blue-700 hover:border-blue-300"
+                            : "border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:bg-blue-50"
+                      } disabled:cursor-not-allowed disabled:opacity-60`}
+                    >
+                      {formatPipelineStage(stage)}
+                    </button>
+
+                    {index < SALES_PIPELINE_STAGES.length - 1 && (
+                      <span className="text-slate-300">→</span>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-5">
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Other outcome
+            </span>
+
+            <button
+              type="button"
+              onClick={() => handlePipelineChange("LOST")}
+              disabled={pipelineUpdating || String(lead.status || "NEW").toUpperCase() === "LOST"}
+              className={`rounded-lg border px-4 py-2 text-sm font-semibold transition ${
+                String(lead.status || "NEW").toUpperCase() === "LOST"
+                  ? "border-red-500 bg-red-500 text-white"
+                  : "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
+              } disabled:cursor-not-allowed disabled:opacity-60`}
+            >
+              Mark as Lost
+            </button>
+          </div>
+
+        </section>
+
+
+        {/* ================================================= */}
+        {/* SUCCESS MESSAGE */}
+        {/* ================================================= */}
+
+        {saveSuccess && (
+          <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3">
+            <p className="text-sm font-medium text-green-700">
+              Lead updated successfully.
+            </p>
+          </div>
+        )}
+
+
+        {/* FOLLOW-UP SUCCESS */}
+
+        {followUpSuccess && (
+          <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3">
+            <p className="text-sm font-medium text-green-700">
+              {followUpSuccess}
+            </p>
+          </div>
+        )}
+
+
+        {/* FOLLOW-UP ERROR */}
+
+        {followUpError && (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+            <p className="text-sm font-medium text-red-700">
+              {followUpError}
+            </p>
+          </div>
+        )}
+
+
+        {/* ================================================= */}
+        {/* TOP INFORMATION CARDS */}
+        {/* ================================================= */}
+
         <div className="grid gap-6 lg:grid-cols-3">
 
-          {/* Lead Information */}
+
+          {/* LEAD INFORMATION */}
+
           <div className="rounded-xl bg-white p-6 shadow-sm">
 
             <h2 className="mb-4 text-lg font-semibold text-slate-900">
@@ -461,7 +1205,8 @@ const formatActivityDate = (date) => {
           </div>
 
 
-          {/* Property Requirements */}
+          {/* PROPERTY REQUIREMENTS */}
+
           <div className="rounded-xl bg-white p-6 shadow-sm">
 
             <h2 className="mb-4 text-lg font-semibold text-slate-900">
@@ -528,7 +1273,8 @@ const formatActivityDate = (date) => {
           </div>
 
 
-          {/* Next Best Action */}
+          {/* NEXT BEST ACTION */}
+
           <div className="rounded-xl bg-white p-6 shadow-sm">
 
             <h2 className="mb-4 text-lg font-semibold text-slate-900">
@@ -549,6 +1295,7 @@ const formatActivityDate = (date) => {
                   </p>
                 </div>
 
+
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                     Action
@@ -559,6 +1306,7 @@ const formatActivityDate = (date) => {
                   </p>
                 </div>
 
+
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                     Channel
@@ -568,6 +1316,7 @@ const formatActivityDate = (date) => {
                     {nextAction.channel || "-"}
                   </p>
                 </div>
+
 
                 {nextAction.reason && (
                   <p className="border-t pt-3 text-sm leading-6 text-slate-500">
@@ -590,118 +1339,15 @@ const formatActivityDate = (date) => {
         </div>
 
 
-        {/* =============================== */}
-        {/* QUICK SALES ACTIONS */}
-        {/* =============================== */}
+        {/* ================================================= */}
+        {/* AI SALES COPILOT */}
+        {/* ================================================= */}
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-900">
-                Sales Actions
-              </h2>
-              <p className="mt-1 text-sm text-slate-500">
-                Take the next action on this lead without leaving the page.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap gap-3">
-              {lead.phone && (
-                <a
-                  href={`tel:${lead.phone}`}
-                  className="flex items-center gap-2 rounded-xl bg-green-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-green-700"
-                >
-                  <Phone size={17} />
-                  Call Lead
-                </a>
-              )}
-
-              {lead.phone && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    openWhatsApp(
-                      copilot?.whatsapp_message || ""
-                    )
-                  }
-                  className="flex items-center gap-2 rounded-xl bg-emerald-100 px-4 py-2.5 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-200"
-                >
-                  <MessageCircle size={17} />
-                  WhatsApp
-                </button>
-              )}
-
-              <button
-                type="button"
-                onClick={() => {
-                  setShowQuickFollowUp(true)
-                  setQuickFollowUpError("")
-                  setQuickFollowUpSuccess("")
-                }}
-                className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
-              >
-                <CalendarPlus size={17} />
-                Create Follow-up
-              </button>
-
-              <button
-                type="button"
-                onClick={() =>
-                  document
-                    .getElementById("sales-copilot")
-                    ?.scrollIntoView({
-                      behavior: "smooth",
-                      block: "start",
-                    })
-                }
-                className="flex items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-4 py-2.5 text-sm font-semibold text-violet-700 transition hover:bg-violet-100"
-              >
-                <Sparkles size={17} />
-                Sales Copilot
-              </button>
-            </div>
-          </div>
-
-          <div className="mt-5 grid gap-4 border-t border-slate-100 pt-5 sm:grid-cols-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                Lead Score
-              </p>
-              <p className="mt-1 text-lg font-bold text-slate-900">
-                {lead.score ?? 0}/100
-              </p>
-            </div>
-
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                Current Status
-              </p>
-              <p className="mt-1 text-sm font-semibold text-slate-800">
-                {lead.status || "NEW"}
-              </p>
-            </div>
-
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                Recommended Action
-              </p>
-              <p className="mt-1 text-sm text-slate-700">
-                {lead.next_best_action ||
-                  nextAction?.action ||
-                  "Qualify and contact lead"}
-              </p>
-            </div>
-          </div>
-        </div>
+        <div className="overflow-hidden rounded-2xl border border-violet-200 bg-white shadow-sm">
 
 
-        {/* AI Sales Copilot */}
-        <div
-          id="sales-copilot"
-          className="overflow-hidden rounded-2xl border border-violet-200 bg-white shadow-sm"
-        >
+          {/* COPILOT HEADER */}
 
-          {/* Copilot Header */}
           <div className="bg-gradient-to-r from-violet-600 to-indigo-600 px-6 py-5 text-white">
 
             <div className="flex items-center justify-between gap-4">
@@ -751,7 +1397,8 @@ const formatActivityDate = (date) => {
           </div>
 
 
-          {/* Copilot Content */}
+          {/* COPILOT CONTENT */}
+
           <div className="p-6">
 
             {copilotLoading ? (
@@ -773,7 +1420,9 @@ const formatActivityDate = (date) => {
 
               <div className="space-y-6">
 
-                {/* Summary */}
+
+                {/* SUMMARY */}
+
                 <div>
 
                   <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-400">
@@ -787,7 +1436,8 @@ const formatActivityDate = (date) => {
                 </div>
 
 
-                {/* Priority */}
+                {/* PRIORITY */}
+
                 <div>
 
                   <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-400">
@@ -809,7 +1459,8 @@ const formatActivityDate = (date) => {
                 </div>
 
 
-                {/* Talking Points */}
+                {/* TALKING POINTS */}
+
                 <div>
 
                   <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">
@@ -844,7 +1495,8 @@ const formatActivityDate = (date) => {
                 </div>
 
 
-                {/* Sales Strategy */}
+                {/* SALES STRATEGY */}
+
                 <div>
 
                   <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-400">
@@ -862,7 +1514,8 @@ const formatActivityDate = (date) => {
                 </div>
 
 
-                {/* WhatsApp Message */}
+                {/* WHATSAPP MESSAGE */}
+
                 <div>
 
                   <div className="mb-3 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
@@ -871,24 +1524,46 @@ const formatActivityDate = (date) => {
                       Personalized WhatsApp Message
                     </h3>
 
-                    <button
-                      onClick={copyWhatsAppMessage}
-                      className="flex items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-                    >
 
-                      {copied ? (
-                        <>
-                          <Check size={16} />
-                          Copied
-                        </>
-                      ) : (
-                        <>
-                          <Copy size={16} />
-                          Copy Message
-                        </>
-                      )}
+                    <div className="flex flex-wrap gap-2">
 
-                    </button>
+                      {/* COPY */}
+
+                      <button
+                        onClick={copyWhatsAppMessage}
+                        className="flex items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                      >
+
+                        {copied ? (
+                          <>
+                            <Check size={16} />
+                            Copied
+                          </>
+                        ) : (
+                          <>
+                            <Copy size={16} />
+                            Copy Message
+                          </>
+                        )}
+
+                      </button>
+
+
+                      {/* OPEN WHATSAPP */}
+
+                      <button
+                        onClick={() =>
+                          openWhatsApp(
+                            copilot.whatsapp_message
+                          )
+                        }
+                        className="flex items-center justify-center gap-2 rounded-lg bg-green-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-green-700"
+                      >
+                        <MessageCircle size={16} />
+                        Open WhatsApp
+                      </button>
+
+                    </div>
 
                   </div>
 
@@ -950,7 +1625,9 @@ const formatActivityDate = (date) => {
 
         <div className="overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-sm">
 
-          {/* Header */}
+
+          {/* HEADER */}
+
           <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-5 text-white">
 
             <div className="flex items-center gap-3">
@@ -976,12 +1653,15 @@ const formatActivityDate = (date) => {
           </div>
 
 
-          {/* Generator Content */}
+          {/* GENERATOR CONTENT */}
+
           <div className="p-6">
 
             <div className="grid gap-6 lg:grid-cols-3">
 
-              {/* Message Type */}
+
+              {/* MESSAGE TYPE */}
+
               <div className="lg:col-span-1">
 
                 <label className="mb-2 block text-sm font-semibold text-slate-700">
@@ -997,12 +1677,14 @@ const formatActivityDate = (date) => {
                 >
 
                   {MESSAGE_TYPES.map((type) => (
+
                     <option
                       key={type.value}
                       value={type.value}
                     >
                       {type.label}
                     </option>
+
                   ))}
 
                 </select>
@@ -1045,7 +1727,8 @@ const formatActivityDate = (date) => {
               </div>
 
 
-              {/* Generated Message */}
+              {/* GENERATED MESSAGE */}
+
               <div className="lg:col-span-2">
 
                 {!generatedMessage && !messageLoading && (
@@ -1104,10 +1787,12 @@ const formatActivityDate = (date) => {
                           <MessageCircle size={19} />
 
                           <span className="text-sm font-semibold">
-                            {generatedMessage.message_type || "WhatsApp Message"}
+                            {generatedMessage.message_type ||
+                              "WhatsApp Message"}
                           </span>
 
                         </div>
+
 
                         {generatedMessage.subject && (
                           <p className="mt-1 text-xs text-slate-500">
@@ -1118,24 +1803,45 @@ const formatActivityDate = (date) => {
                       </div>
 
 
-                      <button
-                        onClick={copyGeneratedMessage}
-                        className="flex items-center justify-center gap-2 rounded-lg border border-green-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-green-50"
-                      >
+                      <div className="flex flex-wrap gap-2">
 
-                        {messageCopied ? (
-                          <>
-                            <Check size={16} />
-                            Copied
-                          </>
-                        ) : (
-                          <>
-                            <Copy size={16} />
-                            Copy Message
-                          </>
-                        )}
+                        {/* COPY GENERATED MESSAGE */}
 
-                      </button>
+                        <button
+                          onClick={copyGeneratedMessage}
+                          className="flex items-center justify-center gap-2 rounded-lg border border-green-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-green-50"
+                        >
+
+                          {messageCopied ? (
+                            <>
+                              <Check size={16} />
+                              Copied
+                            </>
+                          ) : (
+                            <>
+                              <Copy size={16} />
+                              Copy Message
+                            </>
+                          )}
+
+                        </button>
+
+
+                        {/* OPEN WHATSAPP */}
+
+                        <button
+                          onClick={() =>
+                            openWhatsApp(
+                              generatedMessage.message
+                            )
+                          }
+                          className="flex items-center justify-center gap-2 rounded-lg bg-green-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-green-700"
+                        >
+                          <MessageCircle size={16} />
+                          Open WhatsApp
+                        </button>
+
+                      </div>
 
                     </div>
 
@@ -1175,10 +1881,15 @@ const formatActivityDate = (date) => {
         </div>
 
 
-        {/* AI Qualification + Follow Ups */}
+        {/* ================================================= */}
+        {/* AI QUALIFICATION + FOLLOW UPS */}
+        {/* ================================================= */}
+
         <div className="grid gap-6 lg:grid-cols-3">
 
-          {/* AI Qualification */}
+
+          {/* AI QUALIFICATION */}
+
           <div className="rounded-xl bg-white p-6 shadow-sm lg:col-span-2">
 
             <h2 className="mb-4 text-lg font-semibold text-slate-900">
@@ -1193,45 +1904,328 @@ const formatActivityDate = (date) => {
           </div>
 
 
-          {/* Follow Ups */}
+          {/* FOLLOW UPS */}
+
           <div className="rounded-xl bg-white p-6 shadow-sm">
 
-            <h2 className="mb-4 text-lg font-semibold text-slate-900">
-              Follow-ups
-            </h2>
+            <div className="mb-4 flex items-center justify-between gap-3">
+
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">
+                  Follow-ups
+                </h2>
+
+                <p className="mt-1 text-xs text-slate-500">
+                  Manage scheduled sales tasks
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowFollowUpForm((current) => !current)
+                  setFollowUpError("")
+                  setFollowUpSuccess("")
+                }}
+                className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-blue-700"
+              >
+                {showFollowUpForm
+                  ? "Close"
+                  : "+ Add Task"}
+              </button>
+
+            </div>
+
+
+            {/* MANUAL FOLLOW-UP FORM */}
+
+            {showFollowUpForm && (
+
+              <form
+                onSubmit={handleCreateManualFollowUp}
+                className="mb-5 rounded-xl border border-blue-100 bg-blue-50 p-4"
+              >
+
+                <div className="mb-4">
+
+                  <p className="text-sm font-semibold text-slate-900">
+                    Create Follow-up Task
+                  </p>
+
+                  <p className="mt-1 text-xs text-slate-500">
+                    Schedule the next action for this lead.
+                  </p>
+
+                </div>
+
+
+                {/* TASK TYPE */}
+
+                <div className="mb-3">
+
+                  <label className="mb-1 block text-xs font-semibold text-slate-700">
+                    Task Type
+                  </label>
+
+                  <select
+                    name="follow_up_type"
+                    value={followUpForm.follow_up_type}
+                    onChange={handleFollowUpFormChange}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  >
+                    <option value="CALL">
+                      Call
+                    </option>
+
+                    <option value="WHATSAPP">
+                      WhatsApp
+                    </option>
+
+                    <option value="SITE_VISIT">
+                      Site Visit
+                    </option>
+
+                    <option value="PROPERTY_DETAILS">
+                      Property Details
+                    </option>
+
+                    <option value="OTHER">
+                      Other
+                    </option>
+                  </select>
+
+                </div>
+
+
+                {/* DATE AND TIME */}
+
+                <div className="mb-3">
+
+                  <label className="mb-1 block text-xs font-semibold text-slate-700">
+                    Scheduled Date & Time
+                  </label>
+
+                  <input
+                    type="datetime-local"
+                    name="scheduled_at"
+                    value={followUpForm.scheduled_at}
+                    onChange={handleFollowUpFormChange}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  />
+
+                </div>
+
+
+                {/* ACTION */}
+
+                <div className="mb-3">
+
+                  <label className="mb-1 block text-xs font-semibold text-slate-700">
+                    Action
+                  </label>
+
+                  <input
+                    type="text"
+                    name="action"
+                    value={followUpForm.action}
+                    onChange={handleFollowUpFormChange}
+                    placeholder="e.g. Call customer about 2BHK options"
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  />
+
+                </div>
+
+
+                {/* REASON */}
+
+                <div className="mb-4">
+
+                  <label className="mb-1 block text-xs font-semibold text-slate-700">
+                    Notes / Reason
+                  </label>
+
+                  <textarea
+                    name="reason"
+                    value={followUpForm.reason}
+                    onChange={handleFollowUpFormChange}
+                    rows={3}
+                    placeholder="Optional notes for this task..."
+                    className="w-full resize-none rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  />
+
+                </div>
+
+
+                <div className="flex gap-2">
+
+                  <button
+                    type="submit"
+                    disabled={followUpLoading}
+                    className="flex-1 rounded-lg bg-blue-600 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {followUpLoading
+                      ? "Creating..."
+                      : "Create Task"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowFollowUpForm(false)
+                      setFollowUpError("")
+                    }}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                  >
+                    Cancel
+                  </button>
+
+                </div>
+
+              </form>
+            )}
+
+
+            {/* FOLLOW-UP LIST */}
 
             <div className="space-y-4">
 
               {followUps.length === 0 ? (
 
-                <p className="text-sm text-slate-500">
-                  No follow-ups available.
-                </p>
+                <div className="rounded-xl border border-dashed border-slate-300 p-5 text-center">
+
+                  <p className="text-sm font-medium text-slate-600">
+                    No follow-ups available.
+                  </p>
+
+                  <p className="mt-1 text-xs text-slate-400">
+                    Add a task to plan the next sales action.
+                  </p>
+
+                </div>
 
               ) : (
 
-                followUps.map((followUp) => (
+                followUps.map((followUp) => {
 
-                  <div
-                    key={followUp.id}
-                    className="border-b border-slate-100 pb-3 last:border-0"
-                  >
+                  const status =
+                    getFollowUpStatus(followUp)
 
-                    <p className="font-medium text-slate-800">
-                      {followUp.action}
-                    </p>
+                  return (
 
-                    <p className="mt-1 text-sm text-slate-500">
-                      {followUp.follow_up_type}
-                    </p>
+                    <div
+                      key={followUp.id}
+                      className={`rounded-xl border p-4 ${
+                        status === "OVERDUE"
+                          ? "border-red-200 bg-red-50"
+                          : status === "COMPLETED"
+                            ? "border-slate-200 bg-slate-50"
+                            : "border-blue-100 bg-blue-50/40"
+                      }`}
+                    >
 
-                    <p className="mt-1 text-xs font-medium text-slate-400">
-                      {followUp.status}
-                    </p>
+                      <div className="flex items-start justify-between gap-3">
 
-                  </div>
+                        <div className="min-w-0">
 
-                ))
+                          <p
+                            className={`font-semibold ${
+                              status === "COMPLETED"
+                                ? "text-slate-500 line-through"
+                                : "text-slate-800"
+                            }`}
+                          >
+                            {followUp.action}
+                          </p>
+
+                          <p className="mt-1 text-xs font-medium uppercase tracking-wide text-slate-500">
+                            {followUp.follow_up_type}
+                          </p>
+
+                        </div>
+
+
+                        {/* STATUS */}
+
+                        <span
+                          className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${
+                            status === "OVERDUE"
+                              ? "bg-red-100 text-red-700"
+                              : status === "COMPLETED"
+                                ? "bg-slate-200 text-slate-600"
+                                : "bg-blue-100 text-blue-700"
+                          }`}
+                        >
+                          {status}
+                        </span>
+
+                      </div>
+
+
+                      {/* SCHEDULED TIME */}
+
+                      <div className="mt-3">
+
+                        <p
+                          className={`text-xs font-medium ${
+                            status === "OVERDUE"
+                              ? "text-red-700"
+                              : "text-slate-500"
+                          }`}
+                        >
+                          Scheduled:{" "}
+                          {formatFollowUpDate(
+                            followUp.scheduled_at
+                          )}
+                        </p>
+
+                      </div>
+
+
+                      {/* REASON */}
+
+                      {followUp.reason && (
+
+                        <div className="mt-3 border-t border-slate-200/70 pt-3">
+
+                          <p className="text-xs leading-5 text-slate-500">
+                            {followUp.reason}
+                          </p>
+
+                        </div>
+
+                      )}
+
+
+                      {/* COMPLETE BUTTON */}
+
+                      {status !== "COMPLETED" && (
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleCompleteFollowUp(
+                              followUp.id
+                            )
+                          }
+                          disabled={
+                            completingFollowUpId ===
+                            followUp.id
+                          }
+                          className="mt-4 w-full rounded-lg bg-emerald-600 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {completingFollowUpId ===
+                          followUp.id
+                            ? "Completing..."
+                            : "✓ Complete Follow-up"}
+                        </button>
+
+                      )}
+
+                    </div>
+
+                  )
+
+                })
 
               )}
 
@@ -1242,210 +2236,107 @@ const formatActivityDate = (date) => {
         </div>
 
 
-        {/* =============================== */}
+        {/* ================================================= */}
         {/* ACTIVITY TIMELINE */}
-        {/* =============================== */}
+        {/* ================================================= */}
 
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+
           <div className="mb-6 flex items-center justify-between">
+
             <div>
+
               <h2 className="text-lg font-semibold text-slate-900">
                 Activity Timeline
               </h2>
+
               <p className="text-sm text-slate-500">
                 Complete history of interactions and lead actions
               </p>
+
             </div>
+
 
             <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
               {activities.length} activities
             </span>
+
           </div>
 
+
           {activities.length === 0 ? (
+
             <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center">
+
               <p className="text-sm text-slate-500">
                 No activity recorded yet.
               </p>
+
             </div>
+
           ) : (
+
             <div className="relative ml-2 border-l border-slate-200">
+
               {activities.map((activity) => (
+
                 <div
                   key={activity.id}
                   className="relative pb-7 pl-8 last:pb-0"
                 >
-                  {/* Timeline dot */}
+
+                  {/* TIMELINE DOT */}
+
                   <div className="absolute -left-[7px] top-1 h-3 w-3 rounded-full bg-blue-600 ring-4 ring-white" />
 
+
                   <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+
                     <div className="flex flex-wrap items-start justify-between gap-3">
+
                       <div>
+
                         <p className="text-sm font-semibold text-slate-900">
-                          {formatActivityType(activity.activity_type)}
+                          {formatActivityType(
+                            activity.activity_type
+                          )}
                         </p>
+
 
                         {activity.description && (
                           <p className="mt-1 text-sm text-slate-600">
                             {activity.description}
                           </p>
                         )}
+
                       </div>
 
+
                       <span className="text-xs text-slate-400">
-                        {formatActivityDate(activity.created_at)}
+                        {formatActivityDate(
+                          activity.created_at
+                        )}
                       </span>
+
                     </div>
+
                   </div>
+
                 </div>
+
               ))}
+
             </div>
+
           )}
+
         </div>
 
+      </main>
 
+    </div>
+  )
+}
 
-        {/* =============================== */}
-        {/* QUICK FOLLOW-UP MODAL */}
-        {/* =============================== */}
-
-        {showQuickFollowUp && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-            <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
-              <div className="mb-5 flex items-center justify-between gap-4">
-                <div>
-                  <h2 className="text-lg font-semibold text-slate-900">
-                    Create Follow-up
-                  </h2>
-                  <p className="text-sm text-slate-500">
-                    Schedule the next sales action for this lead.
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setShowQuickFollowUp(false)}
-                  className="rounded-lg px-3 py-2 text-sm text-slate-500 hover:bg-slate-100"
-                >
-                  Close
-                </button>
-              </div>
-
-              <form onSubmit={handleQuickFollowUp} className="space-y-4">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <label className="mb-2 block text-sm font-semibold text-slate-700">
-                      Follow-up Type
-                    </label>
-                    <select
-                      value={quickFollowUpForm.follow_up_type}
-                      onChange={(event) =>
-                        setQuickFollowUpForm((previous) => ({
-                          ...previous,
-                          follow_up_type: event.target.value,
-                        }))
-                      }
-                      className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500"
-                    >
-                      <option value="CALL">Call</option>
-                      <option value="WHATSAPP">WhatsApp</option>
-                      <option value="EMAIL">Email</option>
-                      <option value="SITE_VISIT">Site Visit</option>
-                      <option value="OTHER">Other</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="mb-2 block text-sm font-semibold text-slate-700">
-                      Scheduled Date & Time
-                    </label>
-                    <input
-                      type="datetime-local"
-                      value={quickFollowUpForm.scheduled_at}
-                      onChange={(event) =>
-                        setQuickFollowUpForm((previous) => ({
-                          ...previous,
-                          scheduled_at: event.target.value,
-                        }))
-                      }
-                      className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-slate-700">
-                    Action
-                  </label>
-                  <input
-                    type="text"
-                    value={quickFollowUpForm.action}
-                    onChange={(event) =>
-                      setQuickFollowUpForm((previous) => ({
-                        ...previous,
-                        action: event.target.value,
-                      }))
-                    }
-                    placeholder="Example: Call lead and discuss site visit"
-                    className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-slate-700">
-                    Reason
-                  </label>
-                  <textarea
-                    rows="3"
-                    value={quickFollowUpForm.reason}
-                    onChange={(event) =>
-                      setQuickFollowUpForm((previous) => ({
-                        ...previous,
-                        reason: event.target.value,
-                      }))
-                    }
-                    placeholder="Optional reason for this follow-up"
-                    className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500"
-                  />
-                </div>
-
-                {quickFollowUpError && (
-                  <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-                    {quickFollowUpError}
-                  </div>
-                )}
-
-                {quickFollowUpSuccess && (
-                  <div className="rounded-xl border border-green-200 bg-green-50 p-3 text-sm text-green-700">
-                    {quickFollowUpSuccess}
-                  </div>
-                )}
-
-                <div className="flex justify-end gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowQuickFollowUp(false)}
-                    className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                  >
-                    Cancel
-                  </button>
-
-                  <button
-                    type="submit"
-                    disabled={quickFollowUpLoading}
-                    className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {quickFollowUpLoading && (
-                      <RefreshCw size={16} className="animate-spin" />
-                    )}
-                    {quickFollowUpLoading
-                      ? "Creating..."
-                      : "Create Follow-up"}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
 
 export default LeadDetails
