@@ -8,6 +8,13 @@ import {
   Thermometer,
   Snowflake,
   BarChart3,
+  GitBranch,
+  Filter,
+  X,
+  Phone,
+  CalendarClock,
+  ArrowRight,
+  AlertCircle,
 } from "lucide-react"
 
 import {
@@ -18,43 +25,290 @@ import {
 } from "../services/api"
 
 
-/* =============================== */
-/* INSIGHT CARD */
-/* =============================== */
+const PIPELINE_STAGES = [
+  {
+    key: "NEW",
+    label: "New",
+    description: "Newly captured leads",
+  },
+  {
+    key: "QUALIFIED",
+    label: "Qualified",
+    description: "Requirements qualified",
+  },
+  {
+    key: "CONTACTED",
+    label: "Contacted",
+    description: "Sales team contacted",
+  },
+  {
+    key: "INTERESTED",
+    label: "Interested",
+    description: "Lead showed interest",
+  },
+  {
+    key: "SITE_VISIT",
+    label: "Site Visit",
+    description: "Site visit planned",
+  },
+  {
+    key: "NEGOTIATION",
+    label: "Negotiation",
+    description: "Price or terms discussion",
+  },
+  {
+    key: "CONVERTED",
+    label: "Converted",
+    description: "Successfully converted",
+  },
+]
 
-function InsightCard({ title, value, description }) {
+
+const STATUS_OPTIONS = [
+  "ALL",
+  ...PIPELINE_STAGES.map((stage) => stage.key),
+  "LOST",
+]
+
+
+function normalizeStatus(status) {
+  const value = String(status || "NEW").trim().toUpperCase()
+
+  if (!value) {
+    return "NEW"
+  }
+
+  return value
+}
+
+
+function normalizeTemperature(temperature) {
+  return String(temperature || "").trim().toUpperCase()
+}
+
+
+function formatStatus(status) {
+  const value = normalizeStatus(status)
+
+  if (value === "SITE_VISIT") {
+    return "SITE VISIT"
+  }
+
+  return value.replaceAll("_", " ")
+}
+
+
+function formatTemperature(temperature) {
+  const value = normalizeTemperature(temperature)
+
+  if (!value) {
+    return "UNQUALIFIED"
+  }
+
+  return value
+}
+
+
+function getLeadScore(lead) {
+  const score = Number(lead?.score)
+
+  if (Number.isNaN(score)) {
+    return 0
+  }
+
+  return score
+}
+
+
+function formatDate(value) {
+  if (!value) {
+    return "—"
+  }
+
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return "—"
+  }
+
+  return date.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  })
+}
+
+
+function getFollowUpForLead(lead, followUps) {
+  if (!lead || !Array.isArray(followUps)) {
+    return null
+  }
+
+  const leadId = Number(lead.id)
+
+  const matching = followUps.filter(
+    (followUp) => Number(followUp.lead_id) === leadId
+  )
+
+  if (!matching.length) {
+    return null
+  }
+
+  const pending = matching
+    .filter(
+      (followUp) =>
+        String(followUp.status || "").toUpperCase() === "PENDING"
+    )
+    .sort((a, b) => {
+      const dateA = new Date(a.scheduled_at || 0).getTime()
+      const dateB = new Date(b.scheduled_at || 0).getTime()
+
+      return dateA - dateB
+    })
+
+  return pending[0] || matching[0]
+}
+
+
+function getFollowUpTiming(followUp) {
+  if (!followUp?.scheduled_at) {
+    return null
+  }
+
+  const scheduled = new Date(followUp.scheduled_at)
+
+  if (Number.isNaN(scheduled.getTime())) {
+    return null
+  }
+
+  const now = new Date()
+
+  return scheduled <= now ? "DUE" : "UPCOMING"
+}
+
+
+function TemperatureBadge({ temperature }) {
+  const value = normalizeTemperature(temperature)
+
+  if (value === "HOT") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700">
+        <Flame size={13} />
+        HOT
+      </span>
+    )
+  }
+
+  if (value === "WARM") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-2.5 py-1 text-xs font-semibold text-orange-700">
+        <Thermometer size={13} />
+        WARM
+      </span>
+    )
+  }
+
+  if (value === "COLD") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+        <Snowflake size={13} />
+        COLD
+      </span>
+    )
+  }
+
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <p className="text-sm font-medium text-slate-500">
-        {title}
-      </p>
+    <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-600">
+      UNQUALIFIED
+    </span>
+  )
+}
 
-      <p className="mt-2 text-3xl font-bold text-slate-900">
-        {value}
-      </p>
 
-      <p className="mt-1 text-sm text-slate-500">
-        {description}
-      </p>
+function PriorityBadge({ score }) {
+  const numericScore = getLeadScore({ score })
+
+  if (numericScore >= 80) {
+    return (
+      <span className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-bold text-red-700">
+        PRIORITY
+      </span>
+    )
+  }
+
+  if (numericScore >= 60) {
+    return (
+      <span className="rounded-full bg-orange-50 px-2.5 py-1 text-xs font-bold text-orange-700">
+        HIGH
+      </span>
+    )
+  }
+
+  if (numericScore >= 40) {
+    return (
+      <span className="rounded-full bg-yellow-50 px-2.5 py-1 text-xs font-bold text-yellow-700">
+        MEDIUM
+      </span>
+    )
+  }
+
+  return (
+    <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-bold text-gray-600">
+      LOW
+    </span>
+  )
+}
+
+
+function StatCard({ title, value, icon: Icon, description }) {
+  return (
+    <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-sm font-medium text-gray-500">{title}</p>
+          <p className="mt-2 text-3xl font-bold text-gray-900">
+            {value}
+          </p>
+          {description && (
+            <p className="mt-1 text-xs text-gray-500">{description}</p>
+          )}
+        </div>
+
+        <div className="rounded-xl bg-gray-100 p-3">
+          <Icon size={20} className="text-gray-700" />
+        </div>
+      </div>
     </div>
   )
 }
 
 
-/* =============================== */
-/* MAIN DASHBOARD */
-/* =============================== */
+function InsightCard({ title, value, description }) {
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-4">
+      <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+        {title}
+      </p>
+
+      <p className="mt-2 text-xl font-bold text-gray-900">
+        {value}
+      </p>
+
+      {description && (
+        <p className="mt-1 text-xs text-gray-500">
+          {description}
+        </p>
+      )}
+    </div>
+  )
+}
+
 
 function Dashboard() {
-  const [stats, setStats] = useState({
-    total_leads: 0,
-    hot_leads: 0,
-    warm_leads: 0,
-    cold_leads: 0,
-  })
-
+  const [stats, setStats] = useState(null)
   const [sourceAnalytics, setSourceAnalytics] = useState([])
   const [leads, setLeads] = useState([])
+  const [followUps, setFollowUps] = useState([])
 
   const [search, setSearch] = useState("")
   const [temperature, setTemperature] = useState("ALL")
@@ -62,35 +316,23 @@ function Dashboard() {
   const [source, setSource] = useState("ALL")
   const [minScore, setMinScore] = useState("ALL")
   const [followUpFilter, setFollowUpFilter] = useState("ALL")
-  const [sortBy, setSortBy] = useState("newest")
+  const [sortBy, setSortBy] = useState("NEWEST")
 
-  const [followUps, setFollowUps] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [analyticsLoading, setAnalyticsLoading] = useState(false)
+  const [followUpsLoading, setFollowUpsLoading] = useState(false)
 
-  const [followUpsLoading, setFollowUpsLoading] =
-    useState(true)
-
-  const [loading, setLoading] =
-    useState(true)
-
-  const [analyticsLoading, setAnalyticsLoading] =
-    useState(true)
-
-
-  /* =============================== */
-  /* LOAD DASHBOARD */
-  /* =============================== */
-
-  const loadDashboard = async () => {
+  async function loadDashboard() {
     try {
       setLoading(true)
       setAnalyticsLoading(true)
       setFollowUpsLoading(true)
 
       const [
-        statsData,
-        leadsData,
-        analyticsData,
-        followUpsData,
+        dashboardStats,
+        leadsResponse,
+        sourceResponse,
+        followUpsResponse,
       ] = await Promise.all([
         getDashboardStats(),
         getLeads(),
@@ -98,32 +340,39 @@ function Dashboard() {
         getDashboardFollowUps(),
       ])
 
-      setStats(statsData)
+      setStats(dashboardStats || {})
 
-      setLeads(
-        Array.isArray(leadsData)
-          ? leadsData
-          : []
-      )
+      if (Array.isArray(leadsResponse)) {
+        setLeads(leadsResponse)
+      } else if (Array.isArray(leadsResponse?.items)) {
+        setLeads(leadsResponse.items)
+      } else if (Array.isArray(leadsResponse?.leads)) {
+        setLeads(leadsResponse.leads)
+      } else {
+        setLeads([])
+      }
 
-      setSourceAnalytics(
-        Array.isArray(analyticsData)
-          ? analyticsData
-          : []
-      )
+      if (Array.isArray(sourceResponse)) {
+        setSourceAnalytics(sourceResponse)
+      } else if (Array.isArray(sourceResponse?.items)) {
+        setSourceAnalytics(sourceResponse.items)
+      } else if (Array.isArray(sourceResponse?.sources)) {
+        setSourceAnalytics(sourceResponse.sources)
+      } else {
+        setSourceAnalytics([])
+      }
 
-      setFollowUps(
-        Array.isArray(followUpsData)
-          ? followUpsData
-          : []
-      )
-
+      if (Array.isArray(followUpsResponse)) {
+        setFollowUps(followUpsResponse)
+      } else if (Array.isArray(followUpsResponse?.items)) {
+        setFollowUps(followUpsResponse.items)
+      } else if (Array.isArray(followUpsResponse?.follow_ups)) {
+        setFollowUps(followUpsResponse.follow_ups)
+      } else {
+        setFollowUps([])
+      }
     } catch (error) {
-      console.error(
-        "Failed to load dashboard:",
-        error
-      )
-
+      console.error("Dashboard loading failed:", error)
     } finally {
       setLoading(false)
       setAnalyticsLoading(false)
@@ -132,363 +381,281 @@ function Dashboard() {
   }
 
 
-  /* =============================== */
-  /* INITIAL LOAD */
-  /* =============================== */
-
   useEffect(() => {
     loadDashboard()
   }, [])
 
 
-  /* =============================== */
-  /* SALES INTELLIGENCE */
-  /* =============================== */
+  const sourceOptions = useMemo(() => {
+    const sources = new Set()
 
-  const salesInsights = useMemo(() => {
-    const allLeads =
-      Array.isArray(leads)
-        ? leads
-        : []
+    leads.forEach((lead) => {
+      if (lead?.source) {
+        sources.add(String(lead.source))
+      }
+    })
 
-
-    const highIntent = allLeads.filter(
-      (lead) =>
-        lead.temperature === "HOT" ||
-        Number(lead.score || 0) >= 80
+    return Array.from(sources).sort((a, b) =>
+      a.localeCompare(b)
     )
-
-
-    const warmLeads = allLeads.filter(
-      (lead) =>
-        lead.temperature === "WARM"
-    )
-
-
-    const unqualified = allLeads.filter(
-      (lead) =>
-        !lead.temperature ||
-        lead.temperature === "COLD" ||
-        Number(lead.score || 0) < 40
-    )
-
-
-    const sourceCounts =
-      allLeads.reduce(
-        (acc, lead) => {
-          const leadSource =
-            lead.source || "Unknown"
-
-          acc[leadSource] =
-            (acc[leadSource] || 0) + 1
-
-          return acc
-        },
-        {}
-      )
-
-
-    const topSource =
-      Object.entries(sourceCounts)
-        .sort(
-          (a, b) =>
-            b[1] - a[1]
-        )[0] || null
-
-
-    return {
-      highIntentCount:
-        highIntent.length,
-
-      warmCount:
-        warmLeads.length,
-
-      unqualifiedCount:
-        unqualified.length,
-
-      topSource,
-    }
-
   }, [leads])
 
 
-  /* =============================== */
-  /* FILTERED LEADS */
-  /* =============================== */
+  const pipelineStats = useMemo(() => {
+    const counts = {}
 
-  const filteredLeads = useMemo(() => {
-    let result =
-      Array.isArray(leads)
-        ? [...leads]
-        : []
+    PIPELINE_STAGES.forEach((stage) => {
+      counts[stage.key] = 0
+    })
 
-  /* =============================== */
-  /* PRIORITY SALES QUEUE */
-  /* =============================== */
+    let lost = 0
+
+    leads.forEach((lead) => {
+      const leadStatus = normalizeStatus(lead.status)
+
+      if (leadStatus === "LOST") {
+        lost += 1
+        return
+      }
+
+      if (Object.prototype.hasOwnProperty.call(counts, leadStatus)) {
+        counts[leadStatus] += 1
+      } else {
+        counts.NEW += 1
+      }
+    })
+
+    return {
+      counts,
+      lost,
+      total: leads.length,
+    }
+  }, [leads])
+
+
+  const salesInsights = useMemo(() => {
+    const hotLeads = leads.filter(
+      (lead) => normalizeTemperature(lead.temperature) === "HOT"
+    )
+
+    const warmLeads = leads.filter(
+      (lead) => normalizeTemperature(lead.temperature) === "WARM"
+    )
+
+    const highIntent = leads.filter((lead) => {
+      const intent = String(lead.intent || "").toUpperCase()
+
+      return (
+        intent === "HIGH" ||
+        getLeadScore(lead) >= 80
+      )
+    })
+
+    const unqualified = leads.filter(
+      (lead) => !normalizeTemperature(lead.temperature)
+    )
+
+    const sourceCounts = {}
+
+    leads.forEach((lead) => {
+      const leadSource = lead.source || "UNKNOWN"
+
+      sourceCounts[leadSource] =
+        (sourceCounts[leadSource] || 0) + 1
+    })
+
+    const topSource = Object.entries(sourceCounts).sort(
+      (a, b) => b[1] - a[1]
+    )[0]
+
+    return {
+      hot: hotLeads.length,
+      warm: warmLeads.length,
+      highIntent: highIntent.length,
+      unqualified: unqualified.length,
+      topSource: topSource
+        ? `${topSource[0]} (${topSource[1]})`
+        : "—",
+    }
+  }, [leads])
+
 
   const priorityQueue = useMemo(() => {
-    const allLeads = Array.isArray(leads) ? leads : []
+    const now = new Date()
 
-    const getPriority = (lead) => {
-      const leadFollowUps = followUps.filter(
-        (followUp) =>
-          Number(followUp.lead_id) === Number(lead.id)
-      )
-
-      const hasDueFollowUp = leadFollowUps.some(
-        (followUp) => followUp.timing === "DUE"
-      )
-
-      const score = Number(lead.score || 0)
-      const temperature = lead.temperature
-
-      if (
-        temperature === "HOT" &&
-        hasDueFollowUp
-      ) {
-        return {
-          level: "URGENT",
-          rank: 4,
-        }
-      }
-
-      if (
-        temperature === "HOT" ||
-        score >= 80
-      ) {
-        return {
-          level: "HIGH",
-          rank: 3,
-        }
-      }
-
-      if (
-        (temperature === "WARM" &&
-          hasDueFollowUp) ||
-        score >= 60
-      ) {
-        return {
-          level: "MEDIUM",
-          rank: 2,
-        }
-      }
-
-      if (temperature === "WARM") {
-        return {
-          level: "MEDIUM",
-          rank: 2,
-        }
-      }
-
-      return {
-        level: "NORMAL",
-        rank: 1,
-      }
-    }
-
-    return allLeads
+    return [...leads]
       .map((lead) => {
-        const priority = getPriority(lead)
+        const followUp = getFollowUpForLead(lead, followUps)
+        const followUpTiming = getFollowUpTiming(followUp)
 
-        const leadFollowUps = followUps.filter(
-          (followUp) =>
-            Number(followUp.lead_id) === Number(lead.id)
-        )
+        const score = getLeadScore(lead)
+        const temp = normalizeTemperature(lead.temperature)
+        const leadStatus = normalizeStatus(lead.status)
 
-        const dueFollowUp = leadFollowUps.find(
-          (followUp) => followUp.timing === "DUE"
-        )
+        let priority = score
+
+        if (temp === "HOT") {
+          priority += 40
+        } else if (temp === "WARM") {
+          priority += 20
+        }
+
+        if (followUpTiming === "DUE") {
+          priority += 50
+        }
+
+        if (
+          leadStatus === "NEW" ||
+          leadStatus === "QUALIFIED"
+        ) {
+          priority += 10
+        }
+
+        const updatedAt = lead.updated_at
+          ? new Date(lead.updated_at).getTime()
+          : 0
+
+        const createdAt = lead.created_at
+          ? new Date(lead.created_at).getTime()
+          : 0
 
         return {
           ...lead,
-          priority: priority.level,
-          priorityRank: priority.rank,
-          dueFollowUp,
+          followUp,
+          followUpTiming,
+          priority,
+          _updatedAt: updatedAt || createdAt || now.getTime(),
         }
+      })
+      .filter((lead) => {
+        const leadStatus = normalizeStatus(lead.status)
+
+        return leadStatus !== "CONVERTED" &&
+          leadStatus !== "LOST"
       })
       .sort((a, b) => {
-        if (b.priorityRank !== a.priorityRank) {
-          return b.priorityRank - a.priorityRank
+        if (b.priority !== a.priority) {
+          return b.priority - a.priority
         }
 
-        return (
-          Number(b.score || 0) -
-          Number(a.score || 0)
-        )
+        return b._updatedAt - a._updatedAt
       })
-      .slice(0, 10)
+      .slice(0, 5)
   }, [leads, followUps])
 
 
-    /* =============================== */
-    /* SEARCH */
-    /* =============================== */
+  const filteredLeads = useMemo(() => {
+    let result = [...leads]
 
-    if (search.trim()) {
-      const query =
-        search.toLowerCase()
+    const searchValue = search.trim().toLowerCase()
 
-      result =
-        result.filter((lead) =>
-          [
-            lead.name,
-            lead.email,
-            lead.phone,
-            lead.location,
-            lead.configuration,
-          ]
-            .filter(Boolean)
-            .some((value) =>
-              String(value)
-                .toLowerCase()
-                .includes(query)
-            )
-        )
+    if (searchValue) {
+      result = result.filter((lead) => {
+        const searchableText = [
+          lead.name,
+          lead.phone,
+          lead.email,
+          lead.source,
+          lead.location,
+          lead.property_type,
+          lead.configuration,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase()
+
+        return searchableText.includes(searchValue)
+      })
     }
-
-
-    /* =============================== */
-    /* TEMPERATURE FILTER */
-    /* =============================== */
 
     if (temperature !== "ALL") {
-      result =
-        result.filter(
-          (lead) =>
-            lead.temperature ===
-            temperature
-        )
+      result = result.filter(
+        (lead) =>
+          normalizeTemperature(lead.temperature) ===
+          temperature
+      )
     }
-
-
-    /* =============================== */
-    /* STATUS FILTER */
-    /* =============================== */
 
     if (status !== "ALL") {
-      result =
-        result.filter(
-          (lead) =>
-            lead.status === status
-        )
+      result = result.filter(
+        (lead) =>
+          normalizeStatus(lead.status) === status
+      )
     }
-
-
-    /* =============================== */
-    /* SOURCE FILTER */
-    /* =============================== */
 
     if (source !== "ALL") {
-      result =
-        result.filter(
-          (lead) =>
-            lead.source === source
-        )
+      result = result.filter(
+        (lead) =>
+          String(lead.source || "") === source
+      )
     }
-
-
-    /* =============================== */
-    /* MINIMUM SCORE FILTER */
-    /* =============================== */
 
     if (minScore !== "ALL") {
-      const minimum =
-        Number(minScore)
+      const minimum = Number(minScore)
 
-      result =
-        result.filter(
-          (lead) =>
-            Number(
-              lead.score || 0
-            ) >= minimum
+      result = result.filter(
+        (lead) => getLeadScore(lead) >= minimum
+      )
+    }
+
+    if (followUpFilter !== "ALL") {
+      result = result.filter((lead) => {
+        const followUp = getFollowUpForLead(
+          lead,
+          followUps
         )
+
+        if (followUpFilter === "HAS_FOLLOW_UP") {
+          return Boolean(followUp)
+        }
+
+        if (followUpFilter === "NO_FOLLOW_UP") {
+          return !followUp
+        }
+
+        const timing = getFollowUpTiming(followUp)
+
+        if (followUpFilter === "DUE") {
+          return timing === "DUE"
+        }
+
+        if (followUpFilter === "UPCOMING") {
+          return timing === "UPCOMING"
+        }
+
+        return true
+      })
     }
 
+    if (sortBy === "NEWEST") {
+      result.sort((a, b) => {
+        const dateA = new Date(
+          a.created_at || a.updated_at || 0
+        ).getTime()
 
-    /* =============================== */
-    /* FOLLOW-UP FILTER */
-    /* =============================== */
+        const dateB = new Date(
+          b.created_at || b.updated_at || 0
+        ).getTime()
 
-    if (
-      followUpFilter !== "ALL"
-    ) {
-      result =
-        result.filter((lead) => {
-
-          const hasFollowUp =
-            followUps.some(
-              (followUp) =>
-                Number(
-                  followUp.lead_id
-                ) ===
-                Number(lead.id)
-            )
-
-          if (
-            followUpFilter ===
-            "HAS_FOLLOW_UP"
-          ) {
-            return hasFollowUp
-          }
-
-          if (
-            followUpFilter ===
-            "NO_FOLLOW_UP"
-          ) {
-            return !hasFollowUp
-          }
-
-          return true
-        })
+        return dateB - dateA
+      })
     }
 
-
-    /* =============================== */
-    /* SORTING */
-    /* =============================== */
-
-    if (
-      sortBy ===
-      "score-high"
-    ) {
+    if (sortBy === "SCORE_HIGH") {
       result.sort(
         (a, b) =>
-          (b.score ?? 0) -
-          (a.score ?? 0)
+          getLeadScore(b) - getLeadScore(a)
       )
     }
 
-
-    if (
-      sortBy ===
-      "score-low"
-    ) {
+    if (sortBy === "SCORE_LOW") {
       result.sort(
         (a, b) =>
-          (a.score ?? 0) -
-          (b.score ?? 0)
+          getLeadScore(a) - getLeadScore(b)
       )
     }
-
-
-    if (
-      sortBy ===
-      "newest"
-    ) {
-      result.sort(
-        (a, b) =>
-          new Date(
-            b.created_at
-          ) -
-          new Date(
-            a.created_at
-          )
-      )
-    }
-
 
     return result
-
   }, [
     leads,
     search,
@@ -497,1201 +664,1148 @@ function Dashboard() {
     source,
     minScore,
     followUpFilter,
-    followUps,
     sortBy,
+    followUps,
   ])
 
 
-  /* =============================== */
-  /* RENDER */
-  /* =============================== */
+  const activeFilterCount = useMemo(() => {
+    let count = 0
+
+    if (search.trim()) count += 1
+    if (temperature !== "ALL") count += 1
+    if (status !== "ALL") count += 1
+    if (source !== "ALL") count += 1
+    if (minScore !== "ALL") count += 1
+    if (followUpFilter !== "ALL") count += 1
+
+    return count
+  }, [
+    search,
+    temperature,
+    status,
+    source,
+    minScore,
+    followUpFilter,
+  ])
+
+
+  function clearFilters() {
+    setSearch("")
+    setTemperature("ALL")
+    setStatus("ALL")
+    setSource("ALL")
+    setMinScore("ALL")
+    setFollowUpFilter("ALL")
+    setSortBy("NEWEST")
+  }
+
+
+  function handlePipelineStageClick(stage) {
+    if (status === stage) {
+      setStatus("ALL")
+      return
+    }
+
+    setStatus(stage)
+  }
+
+
+  function handleLostClick() {
+    if (status === "LOST") {
+      setStatus("ALL")
+      return
+    }
+
+    setStatus("LOST")
+  }
+
+
+  const totalLeads =
+    stats?.total ??
+    stats?.total_leads ??
+    leads.length
+
+
+  const hotCount =
+    stats?.hot ??
+    stats?.hot_leads ??
+    salesInsights.hot
+
+
+  const warmCount =
+    stats?.warm ??
+    stats?.warm_leads ??
+    salesInsights.warm
+
+
+  const coldCount =
+    stats?.cold ??
+    stats?.cold_leads ??
+    leads.filter(
+      (lead) =>
+        normalizeTemperature(lead.temperature) === "COLD"
+    ).length
+
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-gray-50">
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
 
-
-      {/* =============================== */}
-      {/* HEADER */}
-      {/* =============================== */}
-
-      <header className="border-b bg-white px-8 py-5">
-
-        <div className="flex items-center justify-between">
-
+        {/* HEADER */}
+        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-
-            <h1 className="text-2xl font-bold text-slate-900">
-              LeadFlow AI
+            <h1 className="text-2xl font-bold text-gray-900">
+              Sales Dashboard
             </h1>
 
-            <p className="text-sm text-slate-500">
-              AI-Powered Real Estate CRM
+            <p className="mt-1 text-sm text-gray-500">
+              Monitor leads, sales activity and pipeline progress.
             </p>
-
           </div>
 
-
           <button
+            type="button"
             onClick={loadDashboard}
             disabled={loading}
-            className="flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-50"
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
           >
-
             <RefreshCw
               size={16}
-              className={
-                loading
-                  ? "animate-spin"
-                  : ""
-              }
+              className={loading ? "animate-spin" : ""}
             />
 
             Refresh
-
           </button>
-
         </div>
 
-      </header>
 
-
-      <main className="p-8">
-
-
-        {/* =============================== */}
         {/* STATISTICS */}
-        {/* =============================== */}
-
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-4">
-
+        <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
             title="Total Leads"
-            value={stats.total_leads}
-            icon={<Users size={20} />}
+            value={totalLeads}
+            icon={Users}
+            description="All leads in CRM"
           />
 
           <StatCard
-            title="HOT Leads"
-            value={stats.hot_leads}
-            icon={<Flame size={20} />}
+            title="Hot Leads"
+            value={hotCount}
+            icon={Flame}
+            description="High-priority opportunities"
           />
 
           <StatCard
-            title="WARM Leads"
-            value={stats.warm_leads}
-            icon={<Thermometer size={20} />}
+            title="Warm Leads"
+            value={warmCount}
+            icon={Thermometer}
+            description="Leads requiring nurturing"
           />
 
           <StatCard
-            title="COLD Leads"
-            value={stats.cold_leads}
-            icon={<Snowflake size={20} />}
+            title="Cold Leads"
+            value={coldCount}
+            icon={Snowflake}
+            description="Lower-priority opportunities"
           />
-
         </div>
 
 
-        {/* =============================== */}
-        {/* SALES INTELLIGENCE */}
-        {/* =============================== */}
+        {/* STEP 27 - SALES PIPELINE */}
+        <section className="mb-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+          <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <div className="rounded-lg bg-gray-100 p-2">
+                  <GitBranch
+                    size={18}
+                    className="text-gray-700"
+                  />
+                </div>
 
-        <section className="mt-8">
+                <h2 className="text-lg font-bold text-gray-900">
+                  Sales Pipeline
+                </h2>
+              </div>
 
-          <div className="mb-4">
+              <p className="mt-1 text-sm text-gray-500">
+                Track leads from first capture to conversion.
+              </p>
+            </div>
 
-            <h2 className="text-lg font-semibold text-slate-900">
-              Sales Intelligence
-            </h2>
-
-            <p className="text-sm text-slate-500">
-              Quick signals from your current lead pipeline
-            </p>
-
+            <div className="text-sm text-gray-500">
+              {pipelineStats.total} total leads
+            </div>
           </div>
 
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {/* PIPELINE STAGES */}
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {PIPELINE_STAGES.map((stage) => {
+              const count =
+                pipelineStats.counts[stage.key] || 0
 
-            <InsightCard
-              title="High Intent Leads"
-              value={
-                salesInsights.highIntentCount
-              }
-              description="Hot or score 80+"
-            />
+              const isSelected = status === stage.key
+
+              const percentage =
+                pipelineStats.total > 0
+                  ? Math.round(
+                      (count / pipelineStats.total) * 100
+                    )
+                  : 0
+
+              return (
+                <button
+                  key={stage.key}
+                  type="button"
+                  onClick={() =>
+                    handlePipelineStageClick(stage.key)
+                  }
+                  className={`rounded-xl border p-4 text-left transition ${
+                    isSelected
+                      ? "border-gray-900 bg-gray-900 text-white shadow-md"
+                      : "border-gray-200 bg-white hover:border-gray-400 hover:shadow-sm"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p
+                        className={`text-xs font-semibold uppercase tracking-wide ${
+                          isSelected
+                            ? "text-gray-300"
+                            : "text-gray-500"
+                        }`}
+                      >
+                        {stage.label}
+                      </p>
+
+                      <p
+                        className={`mt-2 text-2xl font-bold ${
+                          isSelected
+                            ? "text-white"
+                            : "text-gray-900"
+                        }`}
+                      >
+                        {count}
+                      </p>
+                    </div>
+
+                    <ArrowRight
+                      size={17}
+                      className={
+                        isSelected
+                          ? "text-gray-300"
+                          : "text-gray-400"
+                      }
+                    />
+                  </div>
+
+                  <p
+                    className={`mt-2 text-xs ${
+                      isSelected
+                        ? "text-gray-300"
+                        : "text-gray-500"
+                    }`}
+                  >
+                    {stage.description}
+                  </p>
+
+                  <div
+                    className={`mt-4 h-1.5 overflow-hidden rounded-full ${
+                      isSelected
+                        ? "bg-gray-700"
+                        : "bg-gray-100"
+                    }`}
+                  >
+                    <div
+                      className={`h-full rounded-full ${
+                        isSelected
+                          ? "bg-white"
+                          : "bg-gray-700"
+                      }`}
+                      style={{
+                        width:
+                          count > 0
+                            ? `${Math.max(percentage, 4)}%`
+                            : "0%",
+                      }}
+                    />
+                  </div>
+
+                  <p
+                    className={`mt-2 text-xs ${
+                      isSelected
+                        ? "text-gray-300"
+                        : "text-gray-400"
+                    }`}
+                  >
+                    {percentage}% of leads
+                  </p>
+                </button>
+              )
+            })}
 
 
-            <InsightCard
-              title="Warm Leads"
-              value={
-                salesInsights.warmCount
-              }
-              description="Leads requiring follow-up"
-            />
+            {/* LOST */}
+            <button
+              type="button"
+              onClick={handleLostClick}
+              className={`rounded-xl border p-4 text-left transition ${
+                status === "LOST"
+                  ? "border-red-700 bg-red-700 text-white shadow-md"
+                  : "border-red-100 bg-red-50 hover:border-red-300"
+              }`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p
+                    className={`text-xs font-semibold uppercase tracking-wide ${
+                      status === "LOST"
+                        ? "text-red-100"
+                        : "text-red-600"
+                    }`}
+                  >
+                    Lost
+                  </p>
 
+                  <p
+                    className={`mt-2 text-2xl font-bold ${
+                      status === "LOST"
+                        ? "text-white"
+                        : "text-red-700"
+                    }`}
+                  >
+                    {pipelineStats.lost}
+                  </p>
+                </div>
 
-            <InsightCard
-              title="Needs Attention"
-              value={
-                salesInsights.unqualifiedCount
-              }
-              description="Cold or low-score leads"
-            />
+                <AlertCircle
+                  size={18}
+                  className={
+                    status === "LOST"
+                      ? "text-red-100"
+                      : "text-red-400"
+                  }
+                />
+              </div>
 
+              <p
+                className={`mt-2 text-xs ${
+                  status === "LOST"
+                    ? "text-red-100"
+                    : "text-red-500"
+                }`}
+              >
+                Leads that did not convert
+              </p>
 
-            <InsightCard
-              title="Top Lead Source"
-              value={
-                salesInsights.topSource?.[0] ||
-                "N/A"
-              }
-              description={
-                salesInsights.topSource
-                  ? `${salesInsights.topSource[1]} leads`
-                  : "No lead source data"
-              }
-            />
-
+              <div
+                className={`mt-4 h-1.5 overflow-hidden rounded-full ${
+                  status === "LOST"
+                    ? "bg-red-600"
+                    : "bg-red-100"
+                }`}
+              >
+                <div
+                  className={`h-full rounded-full ${
+                    status === "LOST"
+                      ? "bg-white"
+                      : "bg-red-500"
+                  }`}
+                  style={{
+                    width:
+                      pipelineStats.lost > 0
+                        ? `${Math.max(
+                            Math.round(
+                              (pipelineStats.lost /
+                                Math.max(
+                                  pipelineStats.total,
+                                  1
+                                )) *
+                                100
+                            ),
+                            4
+                          )}%`
+                        : "0%",
+                  }}
+                />
+              </div>
+            </button>
           </div>
 
+
+          {status !== "ALL" && (
+            <div className="mt-4 flex items-center justify-between rounded-xl bg-gray-50 px-4 py-3">
+              <p className="text-sm text-gray-600">
+                Showing leads in:
+                <span className="ml-1 font-semibold text-gray-900">
+                  {formatStatus(status)}
+                </span>
+              </p>
+
+              <button
+                type="button"
+                onClick={() => setStatus("ALL")}
+                className="inline-flex items-center gap-1 text-sm font-semibold text-gray-700 hover:text-gray-900"
+              >
+                <X size={15} />
+                Clear stage
+              </button>
+            </div>
+          )}
         </section>
 
 
-        {/* =============================== */}
+        {/* SALES INTELLIGENCE */}
+        <section className="mb-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+          <div className="mb-4 flex items-center gap-2">
+            <div className="rounded-lg bg-gray-100 p-2">
+              <BarChart3
+                size={18}
+                className="text-gray-700"
+              />
+            </div>
+
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">
+                Sales Intelligence
+              </h2>
+
+              <p className="text-sm text-gray-500">
+                Quick view of current sales opportunities.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <InsightCard
+              title="High Intent"
+              value={salesInsights.highIntent}
+              description="High-score or high-intent leads"
+            />
+
+            <InsightCard
+              title="Hot"
+              value={salesInsights.hot}
+              description="Immediate sales attention"
+            />
+
+            <InsightCard
+              title="Unqualified"
+              value={salesInsights.unqualified}
+              description="Leads needing qualification"
+            />
+
+            <InsightCard
+              title="Top Source"
+              value={salesInsights.topSource}
+              description="Highest lead volume"
+            />
+          </div>
+        </section>
+
+
         {/* SOURCE ANALYTICS */}
-        {/* =============================== */}
+        <section className="mb-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+          <div className="mb-4">
+            <h2 className="text-lg font-bold text-gray-900">
+              Lead Sources
+            </h2>
 
-        <div className="mt-8 rounded-xl bg-white shadow-sm">
-
-          <div className="border-b px-6 py-5">
-
-            <div className="flex items-center gap-3">
-
-              <div className="rounded-lg bg-slate-100 p-2">
-
-                <BarChart3
-                  size={20}
-                  className="text-slate-600"
-                />
-
-              </div>
-
-
-              <div>
-
-                <h2 className="text-lg font-semibold text-slate-900">
-                  Lead Source Analytics
-                </h2>
-
-                <p className="text-sm text-slate-500">
-                  Understand where your leads are coming from
-                </p>
-
-              </div>
-
-            </div>
-
+            <p className="text-sm text-gray-500">
+              Understand where your leads are coming from.
+            </p>
           </div>
 
+          {analyticsLoading ? (
+            <div className="py-8 text-center text-sm text-gray-500">
+              Loading source analytics...
+            </div>
+          ) : sourceAnalytics.length === 0 ? (
+            <div className="rounded-xl bg-gray-50 p-6 text-center text-sm text-gray-500">
+              No source analytics available.
+            </div>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {sourceAnalytics.map((item, index) => {
+                const name =
+                  item.source ||
+                  item.name ||
+                  item.label ||
+                  "Unknown"
 
-          <div className="overflow-x-auto">
-
-            <table className="w-full text-left">
-
-              <thead className="border-b bg-slate-50">
-
-                <tr>
-
-                  <th className="px-6 py-4 text-sm font-medium">
-                    Source
-                  </th>
-
-                  <th className="px-6 py-4 text-sm font-medium">
-                    Total
-                  </th>
-
-                  <th className="px-6 py-4 text-sm font-medium">
-                    HOT
-                  </th>
-
-                  <th className="px-6 py-4 text-sm font-medium">
-                    WARM
-                  </th>
-
-                  <th className="px-6 py-4 text-sm font-medium">
-                    COLD
-                  </th>
-
-                </tr>
-
-              </thead>
-
-
-              <tbody>
-
-                {analyticsLoading ? (
-
-                  <tr>
-
-                    <td
-                      colSpan="5"
-                      className="px-6 py-10 text-center text-sm text-slate-500"
-                    >
-                      Loading source analytics...
-                    </td>
-
-                  </tr>
-
-                ) : sourceAnalytics.length === 0 ? (
-
-                  <tr>
-
-                    <td
-                      colSpan="5"
-                      className="px-6 py-10 text-center text-sm text-slate-500"
-                    >
-                      No source data available.
-                    </td>
-
-                  </tr>
-
-                ) : (
-
-                  sourceAnalytics.map(
-                    (item) => (
-
-                      <tr
-                        key={item.source}
-                        className="border-b last:border-b-0 hover:bg-slate-50"
-                      >
-
-                        <td className="px-6 py-4">
-
-                          <span className="font-medium text-slate-900">
-                            {item.source}
-                          </span>
-
-                        </td>
-
-
-                        <td className="px-6 py-4 font-semibold">
-                          {item.total}
-                        </td>
-
-
-                        <td className="px-6 py-4">
-
-                          <span className="rounded-full bg-red-100 px-3 py-1 text-sm font-medium text-red-700">
-                            {item.hot}
-                          </span>
-
-                        </td>
-
-
-                        <td className="px-6 py-4">
-
-                          <span className="rounded-full bg-yellow-100 px-3 py-1 text-sm font-medium text-yellow-700">
-                            {item.warm}
-                          </span>
-
-                        </td>
-
-
-                        <td className="px-6 py-4">
-
-                          <span className="rounded-full bg-blue-100 px-3 py-1 text-sm font-medium text-blue-700">
-                            {item.cold}
-                          </span>
-
-                        </td>
-
-                      </tr>
-
-                    )
+                const count =
+                  Number(
+                    item.count ??
+                      item.total ??
+                      item.leads ??
+                      item.value ??
+                      0
                   )
 
-                )}
+                return (
+                  <div
+                    key={`${name}-${index}`}
+                    className="rounded-xl border border-gray-200 p-4"
+                  >
+                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      {name}
+                    </p>
 
-              </tbody>
+                    <p className="mt-2 text-2xl font-bold text-gray-900">
+                      {count}
+                    </p>
 
-            </table>
+                    <p className="mt-1 text-xs text-gray-500">
+                      leads
+                    </p>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </section>
 
-          </div>
 
-        </div>
-
-
-        {/* =============================== */}
         {/* FOLLOW-UP MANAGEMENT */}
-        {/* =============================== */}
+        <section className="mb-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">
+                Follow-up Management
+              </h2>
 
-        <div className="mt-8 rounded-xl bg-white shadow-sm">
-
-          <div className="border-b px-6 py-5">
-
-            <div className="flex items-center gap-3">
-
-              <div className="rounded-lg bg-slate-100 p-2">
-
-                <RefreshCw
-                  size={20}
-                  className="text-slate-600"
-                />
-
-              </div>
-
-
-              <div>
-
-                <h2 className="text-lg font-semibold text-slate-900">
-                  Follow-up Management
-                </h2>
-
-                <p className="text-sm text-slate-500">
-                  Track pending and upcoming lead follow-ups
-                </p>
-
-              </div>
-
+              <p className="text-sm text-gray-500">
+                Leads that require sales follow-up.
+              </p>
             </div>
 
+            <span className="text-sm font-semibold text-gray-600">
+              {followUps.length} follow-ups
+            </span>
           </div>
 
+          {followUpsLoading ? (
+            <div className="py-8 text-center text-sm text-gray-500">
+              Loading follow-ups...
+            </div>
+          ) : followUps.length === 0 ? (
+            <div className="rounded-xl bg-gray-50 p-6 text-center text-sm text-gray-500">
+              No follow-ups available.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {followUps.slice(0, 5).map((followUp) => {
+                const lead = leads.find(
+                  (item) =>
+                    Number(item.id) ===
+                    Number(followUp.lead_id)
+                )
 
-          <div className="overflow-x-auto">
+                const timing =
+                  getFollowUpTiming(followUp)
 
-            <table className="w-full text-left">
+                return (
+                  <div
+                    key={followUp.id}
+                    className="flex flex-col gap-3 rounded-xl border border-gray-200 p-4 md:flex-row md:items-center md:justify-between"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="rounded-lg bg-gray-100 p-2">
+                        <CalendarClock
+                          size={17}
+                          className="text-gray-700"
+                        />
+                      </div>
 
-              <thead className="border-b bg-slate-50">
+                      <div>
+                        <p className="font-semibold text-gray-900">
+                          {lead?.name ||
+                            `Lead #${followUp.lead_id}`}
+                        </p>
 
-                <tr>
+                        <p className="mt-1 text-sm text-gray-600">
+                          {followUp.action ||
+                            followUp.reason ||
+                            "Follow up with lead"}
+                        </p>
 
-                  <th className="px-6 py-4 text-sm font-medium">
-                    Lead
-                  </th>
+                        {followUp.scheduled_at && (
+                          <p className="mt-1 text-xs text-gray-500">
+                            {formatDate(
+                              followUp.scheduled_at
+                            )}
+                          </p>
+                        )}
+                      </div>
+                    </div>
 
-                  <th className="px-6 py-4 text-sm font-medium">
-                    Temperature
-                  </th>
+                    <div className="flex items-center gap-2">
+                      {timing === "DUE" && (
+                        <span className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-bold text-red-700">
+                          DUE
+                        </span>
+                      )}
 
-                  <th className="px-6 py-4 text-sm font-medium">
-                    Follow-up
-                  </th>
+                      {timing === "UPCOMING" && (
+                        <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700">
+                          UPCOMING
+                        </span>
+                      )}
 
-                  <th className="px-6 py-4 text-sm font-medium">
-                    Scheduled
-                  </th>
-
-                  <th className="px-6 py-4 text-sm font-medium">
-                    Action
-                  </th>
-
-                </tr>
-
-              </thead>
-
-
-              <tbody>
-
-                {followUpsLoading ? (
-
-                  <tr>
-
-                    <td
-                      colSpan="5"
-                      className="px-6 py-10 text-center text-sm text-slate-500"
-                    >
-                      Loading follow-ups...
-                    </td>
-
-                  </tr>
-
-                ) : followUps.length === 0 ? (
-
-                  <tr>
-
-                    <td
-                      colSpan="5"
-                      className="px-6 py-10 text-center text-sm text-slate-500"
-                    >
-                      No pending follow-ups.
-                    </td>
-
-                  </tr>
-
-                ) : (
-
-                  followUps.map(
-                    (followUp) => (
-
-                      <tr
-                        key={followUp.id}
-                        className="border-b last:border-b-0 hover:bg-slate-50"
-                      >
-
-                        <td className="px-6 py-4">
-
-                          <Link
-                            to={`/leads/${followUp.lead_id}`}
-                            className="font-medium hover:underline"
-                          >
-                            {followUp.lead_name ||
-                              "Unknown Lead"}
-                          </Link>
-
-                          <div className="text-sm text-slate-500">
-                            {followUp.phone ||
-                              "-"}
-                          </div>
-
-                        </td>
+                      {lead && (
+                        <Link
+                          to={`/leads/${lead.id}`}
+                          className="inline-flex items-center gap-1 rounded-lg bg-gray-900 px-3 py-2 text-xs font-semibold text-white hover:bg-gray-800"
+                        >
+                          Open
+                          <ArrowRight size={13} />
+                        </Link>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </section>
 
 
-                        <td className="px-6 py-4">
+        {/* PRIORITY SALES QUEUE */}
+        <section className="mb-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">
+                Priority Sales Queue
+              </h2>
 
-                          <TemperatureBadge
-                            temperature={
-                              followUp.temperature
-                            }
-                          />
+              <p className="text-sm text-gray-500">
+                Leads requiring the most immediate attention.
+              </p>
+            </div>
 
-                        </td>
-
-
-                        <td className="px-6 py-4">
-
-                          <div className="font-medium">
-                            {
-                              followUp.follow_up_type
-                            }
-                          </div>
-
-                          <div className="text-sm text-slate-500">
-                            {
-                              followUp.status
-                            }
-                          </div>
-
-                        </td>
-
-
-                        <td className="px-6 py-4">
-
-                          <div
-                            className={
-                              followUp.timing ===
-                              "DUE"
-                                ? "font-semibold text-red-600"
-                                : "font-medium text-slate-700"
-                            }
-                          >
-
-                            {followUp.timing ===
-                            "DUE"
-                              ? "Due Now"
-                              : "Upcoming"}
-
-                          </div>
-
-
-                          <div className="text-sm text-slate-500">
-
-                            {followUp.scheduled_at
-                              ? new Date(
-                                  followUp.scheduled_at
-                                ).toLocaleString()
-                              : "-"}
-
-                          </div>
-
-                        </td>
-
-
-                        <td className="px-6 py-4">
-
-                          <div className="text-sm text-slate-700">
-                            {followUp.action}
-                          </div>
-
-
-                          {followUp.reason && (
-
-                            <div className="mt-1 text-xs text-slate-400">
-                              {followUp.reason}
-                            </div>
-
-                          )}
-
-                        </td>
-
-                      </tr>
-
-                    )
-                  )
-
-                )}
-
-              </tbody>
-
-            </table>
-
+            <span className="text-sm font-semibold text-gray-600">
+              Top {priorityQueue.length}
+            </span>
           </div>
-
-
-          <div className="border-t px-6 py-4 text-sm text-slate-500">
-
-            {followUps.length} pending follow-up
-            {followUps.length === 1
-              ? ""
-              : "s"}
-
-          </div>
-
-        </div>
-
-  {/* =============================== */}
-  {/* PRIORITY SALES QUEUE */}
-  {/* =============================== */}
-
-  <div className="mt-8 rounded-xl bg-white shadow-sm">
-
-    <div className="border-b px-6 py-5">
-
-      <div>
-        <h2 className="text-lg font-semibold text-slate-900">
-          Priority Sales Queue
-        </h2>
-
-        <p className="text-sm text-slate-500">
-          Leads that should receive sales attention first
-        </p>
-      </div>
-
-    </div>
-
-    <div className="overflow-x-auto">
-
-      <table className="w-full text-left">
-
-        <thead className="border-b bg-slate-50">
-
-          <tr>
-
-            <th className="px-6 py-4 text-sm font-medium">
-              Priority
-            </th>
-
-            <th className="px-6 py-4 text-sm font-medium">
-              Lead
-            </th>
-
-            <th className="px-6 py-4 text-sm font-medium">
-              Score
-            </th>
-
-            <th className="px-6 py-4 text-sm font-medium">
-              Temperature
-            </th>
-
-            <th className="px-6 py-4 text-sm font-medium">
-              Follow-up
-            </th>
-
-            <th className="px-6 py-4 text-sm font-medium">
-              Next Action
-            </th>
-
-            <th className="px-6 py-4 text-sm font-medium">
-              Actions
-            </th>
-
-          </tr>
-
-        </thead>
-
-        <tbody>
 
           {priorityQueue.length === 0 ? (
-
-            <tr>
-
-              <td
-                colSpan="7"
-                className="px-6 py-10 text-center text-sm text-slate-500"
-              >
-                No leads available for prioritization.
-              </td>
-
-            </tr>
-
+            <div className="rounded-xl bg-gray-50 p-6 text-center text-sm text-gray-500">
+              No priority leads available.
+            </div>
           ) : (
+            <div className="space-y-3">
+              {priorityQueue.map((lead) => (
+                <div
+                  key={lead.id}
+                  className="flex flex-col gap-4 rounded-xl border border-gray-200 p-4 lg:flex-row lg:items-center lg:justify-between"
+                >
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Link
+                        to={`/leads/${lead.id}`}
+                        className="font-semibold text-gray-900 hover:underline"
+                      >
+                        {lead.name ||
+                          `Lead #${lead.id}`}
+                      </Link>
 
-            priorityQueue.map((lead) => (
+                      <TemperatureBadge
+                        temperature={lead.temperature}
+                      />
 
-              <tr
-                key={lead.id}
-                className="border-b last:border-b-0 hover:bg-slate-50"
-              >
+                      <PriorityBadge
+                        score={lead.score}
+                      />
+                    </div>
 
-                {/* PRIORITY */}
+                    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
+                      <span>
+                        Score:{" "}
+                        <strong className="text-gray-700">
+                          {getLeadScore(lead)}
+                        </strong>
+                      </span>
 
-                <td className="px-6 py-4">
+                      <span>
+                        Stage:{" "}
+                        <strong className="text-gray-700">
+                          {formatStatus(lead.status)}
+                        </strong>
+                      </span>
 
-                  <PriorityBadge
-                    priority={lead.priority}
-                  />
+                      {lead.source && (
+                        <span>
+                          Source:{" "}
+                          <strong className="text-gray-700">
+                            {lead.source}
+                          </strong>
+                        </span>
+                      )}
+                    </div>
 
-                </td>
+                    {lead.next_best_action && (
+                      <p className="mt-2 text-sm text-gray-600">
+                        <span className="font-semibold">
+                          Next action:
+                        </span>{" "}
+                        {lead.next_best_action}
+                      </p>
+                    )}
 
-
-                {/* LEAD */}
-
-                <td className="px-6 py-4">
-
-                  <Link
-                    to={`/leads/${lead.id}`}
-                    className="font-medium text-slate-900 hover:underline"
-                  >
-                    {lead.name || "Unnamed Lead"}
-                  </Link>
-
-                  <div className="text-sm text-slate-500">
-                    {lead.phone ||
-                      lead.email ||
-                      "-"}
+                    {lead.followUpTiming === "DUE" && (
+                      <p className="mt-2 text-xs font-semibold text-red-600">
+                        Follow-up is due.
+                      </p>
+                    )}
                   </div>
 
-                </td>
-
-
-                {/* SCORE */}
-
-                <td className="px-6 py-4">
-
-                  <span className="font-semibold">
-                    {lead.score ?? 0}
-                  </span>
-
-                  <span className="text-sm text-slate-400">
-                    /100
-                  </span>
-
-                </td>
-
-
-                {/* TEMPERATURE */}
-
-                <td className="px-6 py-4">
-
-                  <TemperatureBadge
-                    temperature={
-                      lead.temperature
-                    }
-                  />
-
-                </td>
-
-
-                {/* FOLLOW-UP */}
-
-                <td className="px-6 py-4">
-
-                  {lead.dueFollowUp ? (
-
-                    <span className="font-semibold text-red-600">
-                      Due Now
-                    </span>
-
-                  ) : (
-
-                    <span className="text-sm text-slate-500">
-                      No due follow-up
-                    </span>
-
-                  )}
-
-                </td>
-
-
-                {/* NEXT ACTION */}
-
-                <td className="px-6 py-4">
-
-                  <span className="text-sm text-slate-700">
-                    {lead.next_best_action ||
-                      "Qualify and contact lead"}
-                  </span>
-
-                </td>
-
-                {/* ACTIONS */}
-
-                <td className="px-6 py-4">
-
                   <div className="flex flex-wrap gap-2">
-
-                    <Link
-                      to={`/leads/${lead.id}`}
-                      className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                    >
-                      Open
-                    </Link>
-
                     {lead.phone && (
                       <a
                         href={`tel:${lead.phone}`}
-                        className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
                       >
+                        <Phone size={14} />
                         Call
                       </a>
                     )}
 
-                    {lead.dueFollowUp && (
-                      <Link
-                        to={`/leads/${lead.id}`}
-                        className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
-                      >
-                        Follow-up
-                      </Link>
-                    )}
-
+                    <Link
+                      to={`/leads/${lead.id}`}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-gray-900 px-3 py-2 text-xs font-semibold text-white hover:bg-gray-800"
+                    >
+                      Open
+                      <ArrowRight size={14} />
+                    </Link>
                   </div>
-
-                </td>
-
-              </tr>
-
-            ))
-
-          )}
-
-        </tbody>
-
-      </table>
-
-    </div>
-
-    <div className="border-t px-6 py-4 text-sm text-slate-500">
-      Showing {priorityQueue.length} priority lead
-      {priorityQueue.length === 1 ? "" : "s"}
-    </div>
-
-  </div>
-        {/* =============================== */}
-        {/* LEAD MANAGEMENT */}
-        {/* =============================== */}
-
-        <div className="mt-8 rounded-xl bg-white shadow-sm">
-
-          <div className="border-b px-6 py-5">
-
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-
-              <div>
-
-                <h2 className="text-lg font-semibold">
-                  Lead Management
-                </h2>
-
-                <p className="text-sm text-slate-500">
-                  Search, filter and manage AI-qualified leads
-                </p>
-
-              </div>
-
-
-              <div className="flex flex-col gap-3 sm:flex-row">
-
-                {/* SEARCH */}
-
-                <div className="relative">
-
-                  <Search
-                    size={18}
-                    className="absolute left-3 top-2.5 text-slate-400"
-                  />
-
-                  <input
-                    type="text"
-                    placeholder="Search leads..."
-                    value={search}
-                    onChange={(e) =>
-                      setSearch(
-                        e.target.value
-                      )
-                    }
-                    className="rounded-lg border py-2 pl-10 pr-4 text-sm outline-none focus:ring-2"
-                  />
-
                 </div>
+              ))}
+            </div>
+          )}
+        </section>
 
 
-                {/* TEMPERATURE */}
+        {/* LEAD MANAGEMENT */}
+        <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+          <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">
+                Lead Management
+              </h2>
 
-                <select
-                  value={temperature}
-                  onChange={(e) =>
-                    setTemperature(
-                      e.target.value
-                    )
-                  }
-                  className="rounded-lg border px-3 py-2 text-sm outline-none"
-                >
-
-                  <option value="ALL">
-                    All Leads
-                  </option>
-
-                  <option value="HOT">
-                    HOT
-                  </option>
-
-                  <option value="WARM">
-                    WARM
-                  </option>
-
-                  <option value="COLD">
-                    COLD
-                  </option>
-
-                </select>
-
-
-                {/* SORT */}
-
-                <select
-                  value={sortBy}
-                  onChange={(e) =>
-                    setSortBy(
-                      e.target.value
-                    )
-                  }
-                  className="rounded-lg border px-3 py-2 text-sm outline-none"
-                >
-
-                  <option value="newest">
-                    Newest
-                  </option>
-
-                  <option value="score-high">
-                    Highest Score
-                  </option>
-
-                  <option value="score-low">
-                    Lowest Score
-                  </option>
-
-                </select>
-
-              </div>
-
+              <p className="text-sm text-gray-500">
+                Search, filter and manage your leads.
+              </p>
             </div>
 
+            <div className="text-sm text-gray-500">
+              Showing{" "}
+              <span className="font-semibold text-gray-900">
+                {filteredLeads.length}
+              </span>{" "}
+              of {leads.length}
+            </div>
           </div>
 
 
+          {/* FILTERS */}
+          <div className="mb-5 rounded-xl border border-gray-200 bg-gray-50 p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Filter size={16} className="text-gray-600" />
+
+                <span className="text-sm font-semibold text-gray-800">
+                  Filters
+                </span>
+
+                {activeFilterCount > 0 && (
+                  <span className="rounded-full bg-gray-900 px-2 py-0.5 text-xs font-bold text-white">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </div>
+
+              {activeFilterCount > 0 && (
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-gray-600 hover:text-gray-900"
+                >
+                  <X size={14} />
+                  Clear all
+                </button>
+              )}
+            </div>
 
 
-          {/* TABLE */}
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
 
-          <div className="overflow-x-auto">
+              {/* SEARCH */}
+              <div className="relative xl:col-span-2">
+                <Search
+                  size={16}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                />
 
-            <table className="w-full text-left">
-
-              <thead className="border-b bg-slate-50">
-
-                <tr>
-
-                  <th className="px-6 py-4 text-sm font-medium">
-                    Lead
-                  </th>
-
-                  <th className="px-6 py-4 text-sm font-medium">
-                    Requirement
-                  </th>
-
-                  <th className="px-6 py-4 text-sm font-medium">
-                    Score
-                  </th>
-
-                  <th className="px-6 py-4 text-sm font-medium">
-                    Temperature
-                  </th>
-
-                  <th className="px-6 py-4 text-sm font-medium">
-                    Next Action
-                  </th>
-
-                </tr>
-
-              </thead>
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(event) =>
+                    setSearch(event.target.value)
+                  }
+                  placeholder="Search name, phone, email..."
+                  className="w-full rounded-lg border border-gray-200 bg-white py-2.5 pl-9 pr-3 text-sm outline-none focus:border-gray-500"
+                />
+              </div>
 
 
-              <tbody>
+              {/* STATUS */}
+              <select
+                value={status}
+                onChange={(event) =>
+                  setStatus(event.target.value)
+                }
+                className="rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none focus:border-gray-500"
+              >
+                {STATUS_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    Status: {formatStatus(option)}
+                  </option>
+                ))}
+              </select>
 
-                {loading ? (
 
-                  <tr>
+              {/* TEMPERATURE */}
+              <select
+                value={temperature}
+                onChange={(event) =>
+                  setTemperature(event.target.value)
+                }
+                className="rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none focus:border-gray-500"
+              >
+                <option value="ALL">
+                  Temperature: All
+                </option>
 
-                    <td
-                      colSpan="5"
-                      className="px-6 py-10 text-center text-sm text-slate-500"
-                    >
-                      Loading leads...
-                    </td>
+                <option value="HOT">
+                  Temperature: Hot
+                </option>
 
+                <option value="WARM">
+                  Temperature: Warm
+                </option>
+
+                <option value="COLD">
+                  Temperature: Cold
+                </option>
+              </select>
+
+
+              {/* SOURCE */}
+              <select
+                value={source}
+                onChange={(event) =>
+                  setSource(event.target.value)
+                }
+                className="rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none focus:border-gray-500"
+              >
+                <option value="ALL">
+                  Source: All
+                </option>
+
+                {sourceOptions.map((item) => (
+                  <option key={item} value={item}>
+                    Source: {item}
+                  </option>
+                ))}
+              </select>
+
+
+              {/* SCORE */}
+              <select
+                value={minScore}
+                onChange={(event) =>
+                  setMinScore(event.target.value)
+                }
+                className="rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none focus:border-gray-500"
+              >
+                <option value="ALL">
+                  Min Score: All
+                </option>
+
+                <option value="40">
+                  Score: 40+
+                </option>
+
+                <option value="60">
+                  Score: 60+
+                </option>
+
+                <option value="80">
+                  Score: 80+
+                </option>
+              </select>
+
+
+              {/* FOLLOW UP */}
+              <select
+                value={followUpFilter}
+                onChange={(event) =>
+                  setFollowUpFilter(event.target.value)
+                }
+                className="rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none focus:border-gray-500"
+              >
+                <option value="ALL">
+                  Follow-up: All
+                </option>
+
+                <option value="DUE">
+                  Follow-up: Due
+                </option>
+
+                <option value="UPCOMING">
+                  Follow-up: Upcoming
+                </option>
+
+                <option value="HAS_FOLLOW_UP">
+                  Follow-up: Has follow-up
+                </option>
+
+                <option value="NO_FOLLOW_UP">
+                  Follow-up: None
+                </option>
+              </select>
+
+
+              {/* SORT */}
+              <select
+                value={sortBy}
+                onChange={(event) =>
+                  setSortBy(event.target.value)
+                }
+                className="rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none focus:border-gray-500"
+              >
+                <option value="NEWEST">
+                  Sort: Newest
+                </option>
+
+                <option value="SCORE_HIGH">
+                  Sort: Score high
+                </option>
+
+                <option value="SCORE_LOW">
+                  Sort: Score low
+                </option>
+              </select>
+            </div>
+          </div>
+
+
+          {/* LEAD TABLE */}
+          {loading ? (
+            <div className="py-12 text-center text-sm text-gray-500">
+              Loading leads...
+            </div>
+          ) : filteredLeads.length === 0 ? (
+            <div className="rounded-xl bg-gray-50 p-10 text-center">
+              <Users
+                size={30}
+                className="mx-auto text-gray-400"
+              />
+
+              <p className="mt-3 font-semibold text-gray-800">
+                No leads found
+              </p>
+
+              <p className="mt-1 text-sm text-gray-500">
+                Try changing your filters or search terms.
+              </p>
+
+              {activeFilterCount > 0 && (
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="mt-4 rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800"
+                >
+                  Clear filters
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead>
+                  <tr className="text-left">
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Lead
+                    </th>
+
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Stage
+                    </th>
+
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Temperature
+                    </th>
+
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Score
+                    </th>
+
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Source
+                    </th>
+
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Follow-up
+                    </th>
+
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Created
+                    </th>
+
+                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Action
+                    </th>
                   </tr>
+                </thead>
 
-                ) : filteredLeads.length === 0 ? (
+                <tbody className="divide-y divide-gray-100">
+                  {filteredLeads.map((lead) => {
+                    const followUp =
+                      getFollowUpForLead(
+                        lead,
+                        followUps
+                      )
 
-                  <tr>
+                    const followUpTiming =
+                      getFollowUpTiming(followUp)
 
-                    <td
-                      colSpan="5"
-                      className="px-6 py-10 text-center text-sm text-slate-500"
-                    >
-                      No leads found.
-                    </td>
-
-                  </tr>
-
-                ) : (
-
-                  filteredLeads.map(
-                    (lead) => (
-
+                    return (
                       <tr
                         key={lead.id}
-                        className="border-b hover:bg-slate-50"
+                        className="transition hover:bg-gray-50"
                       >
+                        <td className="px-4 py-4">
+                          <div>
+                            <Link
+                              to={`/leads/${lead.id}`}
+                              className="font-semibold text-gray-900 hover:underline"
+                            >
+                              {lead.name ||
+                                `Lead #${lead.id}`}
+                            </Link>
 
-                        {/* LEAD */}
+                            {lead.phone && (
+                              <p className="mt-1 text-xs text-gray-500">
+                                {lead.phone}
+                              </p>
+                            )}
 
-                        <td className="px-6 py-4">
-
-                          <Link
-                            to={`/leads/${lead.id}`}
-                            className="font-medium hover:underline"
-                          >
-                            {lead.name}
-                          </Link>
-
-                          <div className="text-sm text-slate-500">
-                            {lead.email ||
-                              lead.phone ||
-                              "-"}
+                            {lead.email && (
+                              <p className="text-xs text-gray-500">
+                                {lead.email}
+                              </p>
+                            )}
                           </div>
-
                         </td>
 
 
-                        {/* REQUIREMENT */}
-
-                        <td className="px-6 py-4">
-
-                          <div className="font-medium">
-                            {lead.configuration ||
-                              "-"}
-                          </div>
-
-                          <div className="text-sm text-slate-500">
-                            {lead.location ||
-                              "Location unavailable"}
-                          </div>
-
-                        </td>
-
-
-                        {/* SCORE */}
-
-                        <td className="px-6 py-4">
-
-                          <span className="font-semibold">
-                            {lead.score ??
-                              "-"}
+                        <td className="px-4 py-4">
+                          <span className="inline-flex rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-700">
+                            {formatStatus(lead.status)}
                           </span>
+                        </td>
 
-                          {lead.score != null && (
 
-                            <span className="text-sm text-slate-400">
-                              /100
+                        <td className="px-4 py-4">
+                          <TemperatureBadge
+                            temperature={lead.temperature}
+                          />
+                        </td>
+
+
+                        <td className="px-4 py-4">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-gray-900">
+                              {getLeadScore(lead)}
                             </span>
 
-                          )}
-
+                            <PriorityBadge
+                              score={lead.score}
+                            />
+                          </div>
                         </td>
 
 
-                        {/* TEMPERATURE */}
-
-                        <td className="px-6 py-4">
-
-                          <TemperatureBadge
-                            temperature={
-                              lead.temperature
-                            }
-                          />
-
-                        </td>
-
-
-                        {/* ACTION */}
-
-                        <td className="px-6 py-4">
-
-                          <span className="text-sm text-slate-600">
-                            {lead.next_best_action ||
-                              "No action yet"}
+                        <td className="px-4 py-4">
+                          <span className="text-sm text-gray-600">
+                            {lead.source || "—"}
                           </span>
-
                         </td>
 
+
+                        <td className="px-4 py-4">
+                          {followUp ? (
+                            <div>
+                              <span
+                                className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
+                                  followUpTiming === "DUE"
+                                    ? "bg-red-50 text-red-700"
+                                    : "bg-blue-50 text-blue-700"
+                                }`}
+                              >
+                                {followUpTiming ||
+                                  "FOLLOW-UP"}
+                              </span>
+
+                              {followUp.scheduled_at && (
+                                <p className="mt-1 text-xs text-gray-500">
+                                  {formatDate(
+                                    followUp.scheduled_at
+                                  )}
+                                </p>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-gray-400">
+                              None
+                            </span>
+                          )}
+                        </td>
+
+
+                        <td className="px-4 py-4">
+                          <span className="text-sm text-gray-600">
+                            {formatDate(
+                              lead.created_at
+                            )}
+                          </span>
+                        </td>
+
+
+                        <td className="px-4 py-4 text-right">
+                          <Link
+                            to={`/leads/${lead.id}`}
+                            className="inline-flex items-center gap-1 rounded-lg bg-gray-900 px-3 py-2 text-xs font-semibold text-white hover:bg-gray-800"
+                          >
+                            Open
+                            <ArrowRight size={13} />
+                          </Link>
+                        </td>
                       </tr>
-
                     )
-                  )
-
-                )}
-
-              </tbody>
-
-            </table>
-
-          </div>
-
-
-          {/* RESULT COUNT */}
-
-          <div className="border-t px-6 py-4 text-sm text-slate-500">
-
-            Showing{" "}
-            {filteredLeads.length}{" "}
-            of{" "}
-            {leads.length}{" "}
-            leads
-
-          </div>
-
-        </div>
-
-      </main>
-
-    </div>
-  )
-}
-
-
-/* =============================== */
-/* STAT CARD */
-/* =============================== */
-
-function StatCard({
-  title,
-  value,
-  icon,
-}) {
-  return (
-
-    <div className="rounded-xl bg-white p-6 shadow-sm">
-
-      <div className="flex items-center justify-between">
-
-        <p className="text-sm text-slate-500">
-          {title}
-        </p>
-
-        <div className="text-slate-400">
-          {icon}
-        </div>
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
 
       </div>
-
-
-      <h2 className="mt-2 text-3xl font-bold text-slate-900">
-        {value}
-      </h2>
-
     </div>
-
-  )
-}
-
-/* =============================== */
-/* PRIORITY BADGE */
-/* =============================== */
-
-function PriorityBadge({ priority }) {
-  const styles = {
-    URGENT:
-      "bg-red-100 text-red-700 border-red-200",
-
-    HIGH:
-      "bg-orange-100 text-orange-700 border-orange-200",
-
-    MEDIUM:
-      "bg-yellow-100 text-yellow-700 border-yellow-200",
-
-    NORMAL:
-      "bg-slate-100 text-slate-600 border-slate-200",
-  }
-
-  return (
-    <span
-      className={`rounded-full border px-3 py-1 text-xs font-semibold ${
-        styles[priority] ||
-        styles.NORMAL
-      }`}
-    >
-      {priority || "NORMAL"}
-    </span>
-  )
-}
-/* =============================== */
-/* TEMPERATURE BADGE */
-/* =============================== */
-
-function TemperatureBadge({
-  temperature,
-}) {
-
-  if (!temperature) {
-
-    return (
-
-      <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-600">
-        UNQUALIFIED
-      </span>
-
-    )
-
-  }
-
-
-  const styles = {
-
-    HOT:
-      "bg-red-100 text-red-700",
-
-    WARM:
-      "bg-yellow-100 text-yellow-700",
-
-    COLD:
-      "bg-blue-100 text-blue-700",
-
-  }
-
-
-  return (
-
-    <span
-      className={`rounded-full px-3 py-1 text-sm font-medium ${
-        styles[temperature] ||
-        "bg-slate-100 text-slate-600"
-      }`}
-    >
-      {temperature}
-    </span>
-
   )
 }
 
