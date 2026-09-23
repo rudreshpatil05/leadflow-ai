@@ -335,18 +335,18 @@ function Dashboard() {
         dashboardStats,
         leadsResponse,
         salesAnalyticsResponse,
-
         sourceResponse,
         followUpsResponse,
       ] = await Promise.all([
         getDashboardStats(),
         getLeads(),
+        getSalesAnalytics(),
         getSourceAnalytics(),
         getDashboardFollowUps(),
-        getSalesAnalytics(),
       ])
 
       setStats(dashboardStats || {})
+      setSalesAnalytics(salesAnalyticsResponse || {})
 
       if (Array.isArray(leadsResponse)) {
         setLeads(leadsResponse)
@@ -816,6 +816,81 @@ function Dashboard() {
             description="Lower-priority opportunities"
           />
         </div>
+
+
+        {/* STEP 29 - SALES PERFORMANCE */}
+        <section className="mb-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+          <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <div className="rounded-lg bg-gray-100 p-2">
+                  <BarChart3
+                    size={18}
+                    className="text-gray-700"
+                  />
+                </div>
+
+                <h2 className="text-lg font-bold text-gray-900">
+                  Sales Performance
+                </h2>
+              </div>
+
+              <p className="mt-1 text-sm text-gray-500">
+                Track conversion performance and revenue generated.
+              </p>
+            </div>
+
+            <div className="text-sm text-gray-500">
+              {salesAnalytics?.conversion_rate ?? 0}% conversion rate
+            </div>
+          </div>
+
+
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <InsightCard
+              title="Active Leads"
+              value={salesAnalytics?.active_leads ?? 0}
+              description="Leads currently in pipeline"
+            />
+
+            <InsightCard
+              title="Converted"
+              value={salesAnalytics?.converted_leads ?? 0}
+              description="Successfully closed leads"
+            />
+
+            <InsightCard
+              title="Lost"
+              value={salesAnalytics?.lost_leads ?? 0}
+              description="Leads marked as lost"
+            />
+
+            <InsightCard
+              title="Conversion Rate"
+              value={`${salesAnalytics?.conversion_rate ?? 0}%`}
+              description="Converted leads / total leads"
+            />
+          </div>
+
+
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <InsightCard
+              title="Total Deal Value"
+              value={`₹${Number(
+                salesAnalytics?.total_deal_value ?? 0
+              ).toLocaleString("en-IN")}`}
+              description="Combined value of converted deals"
+            />
+
+            <InsightCard
+              title="Average Deal Value"
+              value={`₹${Number(
+                salesAnalytics?.average_deal_value ?? 0
+              ).toLocaleString("en-IN")}`}
+              description="Average value per converted deal"
+            />
+          </div>
+        </section>
 
 
         {/* STEP 27 - SALES PIPELINE */}
