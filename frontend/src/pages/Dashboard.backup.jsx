@@ -27,7 +27,7 @@ function Dashboard() {
   const [temperature, setTemperature] = useState("ALL")
   const [sortBy, setSortBy] = useState("newest")
   const [loading, setLoading] = useState(true)
-
+  const [salesAnalytics, setSalesAnalytics] = useState(null)
   const loadDashboard = async () => {
     try {
       setLoading(true)

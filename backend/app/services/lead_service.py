@@ -302,3 +302,4 @@ def delete_lead(
     db.commit()
 
     return True
+

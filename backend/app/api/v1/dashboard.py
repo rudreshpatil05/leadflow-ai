@@ -133,3 +133,102 @@ def dashboard_follow_ups(
         )
 
     return result
+
+@router.get("/sales-analytics")
+def get_sales_analytics(
+    db: Session = Depends(get_db),
+):
+    leads = (
+        db.query(Lead)
+        .order_by(Lead.created_at.desc())
+        .all()
+    )
+
+    total_leads = len(leads)
+
+    converted_leads = [
+        lead
+        for lead in leads
+        if str(lead.status or "").upper() == "CONVERTED"
+    ]
+
+    lost_leads = [
+        lead
+        for lead in leads
+        if str(lead.status or "").upper() == "LOST"
+    ]
+
+    active_leads = [
+        lead
+        for lead in leads
+        if str(lead.status or "").upper()
+        not in {"CONVERTED", "LOST"}
+    ]
+
+    total_deal_value = sum(
+        float(lead.deal_value or 0)
+        for lead in converted_leads
+    )
+
+    average_deal_value = (
+        total_deal_value / len(converted_leads)
+        if converted_leads
+        else 0
+    )
+
+    conversion_rate = (
+        (len(converted_leads) / total_leads) * 100
+        if total_leads
+        else 0
+    )
+
+    lost_rate = (
+        (len(lost_leads) / total_leads) * 100
+        if total_leads
+        else 0
+    )
+
+    pipeline_stages = [
+        "NEW",
+        "QUALIFIED",
+        "CONTACTED",
+        "INTERESTED",
+        "SITE_VISIT",
+        "NEGOTIATION",
+        "CONVERTED",
+    ]
+
+    pipeline = {}
+
+    for stage in pipeline_stages:
+        pipeline[stage] = sum(
+            1
+            for lead in leads
+            if str(lead.status or "").upper() == stage
+        )
+
+    pipeline["LOST"] = len(lost_leads)
+
+    return {
+        "total_leads": total_leads,
+        "active_leads": len(active_leads),
+        "converted_leads": len(converted_leads),
+        "lost_leads": len(lost_leads),
+        "conversion_rate": round(
+            conversion_rate,
+            2,
+        ),
+        "lost_rate": round(
+            lost_rate,
+            2,
+        ),
+        "total_deal_value": round(
+            total_deal_value,
+            2,
+        ),
+        "average_deal_value": round(
+            average_deal_value,
+            2,
+        ),
+        "pipeline": pipeline,
+    }
