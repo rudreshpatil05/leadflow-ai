@@ -217,4 +217,11 @@ export async function getSalesAnalytics() {
 // DEFAULT API
 // ===============================
 
+
+
+export const getSourcePerformance = async () => {
+  const response = await API.get("/dashboard/source-performance")
+  return response.data
+}
+
 export default API

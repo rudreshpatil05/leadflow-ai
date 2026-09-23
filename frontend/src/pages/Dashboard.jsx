@@ -20,6 +20,7 @@ import {
 import {
   getDashboardStats,
   getSourceAnalytics,
+  getSourcePerformance,
   getDashboardFollowUps,
   getLeads,
   getSalesAnalytics,
@@ -308,6 +309,7 @@ function InsightCard({ title, value, description }) {
 function Dashboard() {
   const [stats, setStats] = useState(null)
   const [sourceAnalytics, setSourceAnalytics] = useState([])
+  const [sourcePerformance, setSourcePerformance] = useState([])
   const [leads, setLeads] = useState([])
   const [followUps, setFollowUps] = useState([])
   const [salesAnalytics, setSalesAnalytics] = useState(null)
@@ -336,12 +338,14 @@ function Dashboard() {
         leadsResponse,
         salesAnalyticsResponse,
         sourceResponse,
+        sourcePerformanceResponse,
         followUpsResponse,
       ] = await Promise.all([
         getDashboardStats(),
         getLeads(),
         getSalesAnalytics(),
         getSourceAnalytics(),
+        getSourcePerformance(),
         getDashboardFollowUps(),
       ])
 
@@ -366,6 +370,14 @@ function Dashboard() {
         setSourceAnalytics(sourceResponse.sources)
       } else {
         setSourceAnalytics([])
+      }
+
+      if (Array.isArray(sourcePerformanceResponse?.sources)) {
+        setSourcePerformance(sourcePerformanceResponse.sources)
+      } else if (Array.isArray(sourcePerformanceResponse)) {
+        setSourcePerformance(sourcePerformanceResponse)
+      } else {
+        setSourcePerformance([])
       }
 
       if (Array.isArray(followUpsResponse)) {
@@ -1187,63 +1199,139 @@ function Dashboard() {
         </section>
 
 
-        {/* SOURCE ANALYTICS */}
+        {/* STEP 31 - SALES SOURCE PERFORMANCE */}
         <section className="mb-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-          <div className="mb-4">
-            <h2 className="text-lg font-bold text-gray-900">
-              Lead Sources
-            </h2>
+          <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">
+                Sales by Source
+              </h2>
 
-            <p className="text-sm text-gray-500">
-              Understand where your leads are coming from.
-            </p>
+              <p className="text-sm text-gray-500">
+                Compare lead quality, conversions and revenue across acquisition sources.
+              </p>
+            </div>
+
+            <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+              Source Performance
+            </span>
           </div>
 
           {analyticsLoading ? (
             <div className="py-8 text-center text-sm text-gray-500">
-              Loading source analytics...
+              Loading source performance...
             </div>
-          ) : sourceAnalytics.length === 0 ? (
+          ) : sourcePerformance.length === 0 ? (
             <div className="rounded-xl bg-gray-50 p-6 text-center text-sm text-gray-500">
-              No source analytics available.
+              No source performance data available.
             </div>
           ) : (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {sourceAnalytics.map((item, index) => {
-                const name =
-                  item.source ||
-                  item.name ||
-                  item.label ||
-                  "Unknown"
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[900px] text-left">
+                <thead className="border-b bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Source
+                    </th>
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Total Leads
+                    </th>
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Converted
+                    </th>
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Lost
+                    </th>
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Conversion
+                    </th>
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Revenue
+                    </th>
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Avg Deal
+                    </th>
+                  </tr>
+                </thead>
 
-                const count =
-                  Number(
-                    item.count ??
-                      item.total ??
-                      item.leads ??
-                      item.value ??
-                      0
-                  )
+                <tbody>
+                  {sourcePerformance.map((item) => {
+                    const itemSource = String(item.source || "UNKNOWN")
+                    const total = Number(item.total_leads || 0)
+                    const converted = Number(item.converted_leads || 0)
+                    const lost = Number(item.lost_leads || 0)
+                    const conversionRate = Number(item.conversion_rate || 0)
+                    const revenue = Number(item.total_deal_value || 0)
+                    const averageDeal = Number(item.average_deal_value || 0)
+                    const isSelected = source === itemSource
 
-                return (
-                  <div
-                    key={`${name}-${index}`}
-                    className="rounded-xl border border-gray-200 p-4"
-                  >
-                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      {name}
-                    </p>
+                    return (
+                      <tr
+                        key={itemSource}
+                        className={`border-b last:border-b-0 ${
+                          isSelected ? "bg-gray-50" : "hover:bg-gray-50"
+                        }`}
+                      >
+                        <td className="px-4 py-4">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setSource(isSelected ? "ALL" : itemSource)
+                            }
+                            className={`font-semibold hover:underline ${
+                              isSelected ? "text-gray-900" : "text-gray-700"
+                            }`}
+                          >
+                            {itemSource}
+                          </button>
+                        </td>
 
-                    <p className="mt-2 text-2xl font-bold text-gray-900">
-                      {count}
-                    </p>
+                        <td className="px-4 py-4 text-sm font-semibold text-gray-900">
+                          {total}
+                        </td>
 
-                    <p className="mt-1 text-xs text-gray-500">
-                      leads
-                    </p>
-                  </div>
-                )
-              })}
+                        <td className="px-4 py-4 text-sm font-semibold text-gray-900">
+                          {converted}
+                        </td>
+
+                        <td className="px-4 py-4 text-sm font-semibold text-gray-900">
+                          {lost}
+                        </td>
+
+                        <td className="px-4 py-4">
+                          <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-700">
+                            {conversionRate.toFixed(2)}%
+                          </span>
+                        </td>
+
+                        <td className="px-4 py-4 text-sm font-semibold text-gray-900">
+                          ₹{revenue.toLocaleString("en-IN")}
+                        </td>
+
+                        <td className="px-4 py-4 text-sm font-semibold text-gray-900">
+                          ₹{averageDeal.toLocaleString("en-IN")}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {source !== "ALL" && (
+            <div className="mt-4 flex items-center justify-between rounded-xl bg-gray-50 px-4 py-3">
+              <p className="text-sm text-gray-600">
+                Showing leads from <span className="font-semibold text-gray-900">{source}</span>
+              </p>
+
+              <button
+                type="button"
+                onClick={() => setSource("ALL")}
+                className="text-sm font-semibold text-gray-700 hover:text-gray-900"
+              >
+                Clear source
+              </button>
             </div>
           )}
         </section>

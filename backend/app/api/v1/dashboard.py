@@ -232,3 +232,73 @@ def get_sales_analytics(
         ),
         "pipeline": pipeline,
     }
+
+
+@router.get("/source-performance")
+def get_source_performance(
+    db: Session = Depends(get_db),
+):
+    leads = (
+        db.query(Lead)
+        .order_by(Lead.source.asc(), Lead.created_at.desc())
+        .all()
+    )
+
+    grouped = {}
+
+    for lead in leads:
+        source = str(lead.source or "UNKNOWN").strip() or "UNKNOWN"
+        source_key = source.upper()
+
+        if source_key not in grouped:
+            grouped[source_key] = {
+                "source": source_key,
+                "total_leads": 0,
+                "converted_leads": 0,
+                "lost_leads": 0,
+                "total_deal_value": 0.0,
+            }
+
+        item = grouped[source_key]
+        item["total_leads"] += 1
+
+        status = str(lead.status or "").strip().upper()
+
+        if status == "CONVERTED":
+            item["converted_leads"] += 1
+            item["total_deal_value"] += float(lead.deal_value or 0)
+        elif status == "LOST":
+            item["lost_leads"] += 1
+
+    sources = []
+
+    for item in grouped.values():
+        converted = item["converted_leads"]
+        total = item["total_leads"]
+        revenue = item["total_deal_value"]
+
+        item["conversion_rate"] = round(
+            (converted / total) * 100 if total else 0,
+            2,
+        )
+
+        item["average_deal_value"] = round(
+            revenue / converted if converted else 0,
+            2,
+        )
+
+        item["total_deal_value"] = round(revenue, 2)
+
+        sources.append(item)
+
+    sources.sort(
+        key=lambda item: (
+            item["total_deal_value"],
+            item["converted_leads"],
+            item["total_leads"],
+        ),
+        reverse=True,
+    )
+
+    return {"sources": sources}
+
