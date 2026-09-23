@@ -22,6 +22,7 @@ import {
   getSourceAnalytics,
   getDashboardFollowUps,
   getLeads,
+  getSalesAnalytics,
 } from "../services/api"
 
 
@@ -309,7 +310,9 @@ function Dashboard() {
   const [sourceAnalytics, setSourceAnalytics] = useState([])
   const [leads, setLeads] = useState([])
   const [followUps, setFollowUps] = useState([])
+  const [salesAnalytics, setSalesAnalytics] = useState(null)
 
+  
   const [search, setSearch] = useState("")
   const [temperature, setTemperature] = useState("ALL")
   const [status, setStatus] = useState("ALL")
@@ -331,6 +334,8 @@ function Dashboard() {
       const [
         dashboardStats,
         leadsResponse,
+        salesAnalyticsResponse,
+
         sourceResponse,
         followUpsResponse,
       ] = await Promise.all([
@@ -338,6 +343,7 @@ function Dashboard() {
         getLeads(),
         getSourceAnalytics(),
         getDashboardFollowUps(),
+        getSalesAnalytics(),
       ])
 
       setStats(dashboardStats || {})

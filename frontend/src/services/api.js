@@ -205,7 +205,13 @@ export const getWhatsAppUrl = (
 
   return `https://wa.me/${normalizedPhone}?text=${encodedMessage}`
 }
+export async function getSalesAnalytics() {
+  const response = await api.get(
+    "/api/v1/dashboard/sales-analytics"
+  )
 
+  return response.data
+}
 
 // ===============================
 // DEFAULT API
