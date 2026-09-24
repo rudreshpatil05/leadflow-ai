@@ -223,5 +223,78 @@ export const getSourcePerformance = async () => {
   const response = await API.get("/dashboard/source-performance")
   return response.data
 }
+// ============================================================
+// STEP 32 - REVENUE TREND
+// ============================================================
 
+export const getRevenueTrend = async () => {
+  const response = await API.get(
+    "/dashboard/revenue-trend"
+  )
+
+  return response.data
+}
+
+
+// ============================================================
+// STEP 33 - CONVERSION FUNNEL
+// ============================================================
+
+export const getConversionFunnel = async () => {
+  const response = await API.get(
+    "/dashboard/conversion-funnel"
+  )
+
+  return response.data
+}
+
+
+// ============================================================
+// STEP 34 - LEAD AGING
+// ============================================================
+
+export const getLeadAging = async () => {
+  const response = await API.get(
+    "/dashboard/lead-aging"
+  )
+
+  return response.data
+}
+
+
+// ============================================================
+// STEP 35 - SALES ALERTS
+// ============================================================
+
+export const getSalesAlerts = async () => {
+  const response = await API.get(
+    "/dashboard/sales-alerts"
+  )
+
+  return response.data
+}
+export const getLeadIntelligence = async () => {
+  const response = await API.get("/dashboard/lead-intelligence")
+  return response.data
+}
+
+export const getFollowUpIntelligence = async () => {
+  const response = await API.get("/dashboard/follow-up-intelligence")
+  return response.data
+}
+
+export const getRevenueForecast = async () => {
+  const response = await API.get("/dashboard/revenue-forecast")
+  return response.data
+}
+
+export const getSalesProductivity = async () => {
+  const response = await API.get("/dashboard/sales-productivity")
+  return response.data
+}
+
+export const getLeadFilterOptions = async () => {
+  const response = await API.get("/dashboard/lead-filter-options")
+  return response.data
+}
 export default API
