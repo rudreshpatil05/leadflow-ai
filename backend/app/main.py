@@ -7,7 +7,7 @@ from backend.app.db.database import engine
 from fastapi.middleware.cors import CORSMiddleware
 from backend.app.api.v1.follow_ups import router as follow_ups_router
 from backend.app.api.v1.next_actions import router as next_actions_router
-
+from backend.app.routers.sales_assistant import router as sales_assistant_router
 
 app = FastAPI(
     title="LeadFlow AI",
@@ -15,7 +15,12 @@ app = FastAPI(
     version="0.1.0",
 )
 app.include_router(
-    follow_ups_router,
+    activities_router,
+    prefix="/api/v1",
+)
+
+app.include_router(
+    sales_assistant_router,
     prefix="/api/v1",
 )
 
