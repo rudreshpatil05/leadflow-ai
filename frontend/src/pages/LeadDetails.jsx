@@ -1036,6 +1036,142 @@ function LeadDetails() {
 
 
   // =========================================================
+  // AI SALES ACTIONS
+  // =========================================================
+
+  const getLocalDateTimeInput = (hoursFromNow = 1) => {
+    const date = new Date()
+    date.setHours(date.getHours() + hoursFromNow)
+
+    const pad = (value) => String(value).padStart(2, "0")
+
+    return `${date.getFullYear()}-${pad(
+      date.getMonth() + 1
+    )}-${pad(date.getDate())}T${pad(
+      date.getHours()
+    )}:${pad(date.getMinutes())}`
+  }
+
+
+  const handleAIScheduleFollowUp = async () => {
+    if (!lead?.id) return
+
+    try {
+      setFollowUpLoading(true)
+      setFollowUpError("")
+      setFollowUpSuccess("")
+
+      const scheduledAt = getLocalDateTimeInput(1)
+
+      const action =
+        nextAction?.action ||
+        copilot?.sales_strategy ||
+        "Follow up with lead"
+
+      const reason =
+        nextAction?.reason ||
+        copilot?.summary ||
+        "AI recommended follow-up"
+
+      await createManualFollowUp(
+        lead.id,
+        nextAction?.channel === "PHONE" ? "CALL" : "WHATSAPP",
+        scheduledAt,
+        action,
+        reason
+      )
+
+      await createLeadActivity(
+        lead.id,
+        "AI_FOLLOW_UP_CREATED",
+        `AI recommended follow-up created: ${action}`
+      )
+
+      const [
+        updatedFollowUps,
+        updatedActivities,
+        updatedNextAction,
+      ] = await Promise.all([
+        getLeadFollowUps(lead.id),
+        getLeadActivities(lead.id),
+        getLeadNextAction(lead.id),
+      ])
+
+      setFollowUps(updatedFollowUps)
+      setActivities(updatedActivities)
+      setNextAction(updatedNextAction)
+
+      setFollowUpSuccess(
+        "AI follow-up scheduled successfully for 1 hour from now."
+      )
+
+      setTimeout(() => {
+        setFollowUpSuccess("")
+      }, 3500)
+    } catch (error) {
+      console.error(
+        "Failed to schedule AI follow-up:",
+        error
+      )
+
+      setFollowUpError(
+        error.response?.data?.detail ||
+          "Failed to schedule AI follow-up."
+      )
+    } finally {
+      setFollowUpLoading(false)
+    }
+  }
+
+
+  const handleAICall = async () => {
+    if (!lead?.phone) {
+      setFollowUpError("This lead does not have a phone number.")
+      return
+    }
+
+    const cleanPhone = String(lead.phone).replace(/\D/g, "")
+
+    if (!cleanPhone) {
+      setFollowUpError("This lead does not have a valid phone number.")
+      return
+    }
+
+    try {
+      window.location.href = `tel:${cleanPhone}`
+
+      await createLeadActivity(
+        lead.id,
+        "AI_CALL_INITIATED",
+        "Call initiated from the AI recommended sales action."
+      )
+
+      const updatedActivities = await getLeadActivities(lead.id)
+      setActivities(updatedActivities)
+    } catch (error) {
+      console.error(
+        "Failed to record AI call activity:",
+        error
+      )
+    }
+  }
+
+
+  const handleAIWhatsApp = async () => {
+    if (!lead?.phone) {
+      setFollowUpError("This lead does not have a phone number.")
+      return
+    }
+
+    const message =
+      copilot?.whatsapp_message ||
+      generatedMessage?.message ||
+      ""
+
+    await openWhatsApp(message)
+  }
+
+  // =========================================================
   // LOAD LEAD DETAILS
   // =========================================================
 
@@ -1967,7 +2103,41 @@ function LeadDetails() {
 
               </div>
 
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const result = await runLeadAutomation(
+                      lead.id
+                    )
 
+                    console.log(
+                      "Automation executed:",
+                      result
+                    )
+
+                    const [
+                      updatedFollowUps,
+                      updatedActivities,
+                    ] = await Promise.all([
+                      getLeadFollowUps(lead.id),
+                      getLeadActivities(lead.id),
+                    ])
+
+                    setFollowUps(updatedFollowUps)
+                    setActivities(updatedActivities)
+
+                  } catch (error) {
+                    console.error(
+                      "Automation failed:",
+                      error
+                    )
+                  }
+                }}
+                className="flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700"
+              >
+                ⚡ Run AI Automation
+              </button>
               <button
                 onClick={loadSalesCopilot}
                 disabled={copilotLoading}
@@ -2096,6 +2266,85 @@ function LeadDetails() {
                       {copilot.sales_strategy ||
                         "-"}
                     </p>
+
+                  </div>
+
+                </div>
+
+
+                {/* AI RECOMMENDED ACTION */}
+                <div className="rounded-2xl border border-violet-200 bg-violet-50 p-5">
+
+                  <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-wide text-violet-500">
+                        AI Recommended Action
+                      </p>
+
+                      <h3 className="mt-1 text-lg font-bold text-violet-950">
+                        {nextAction?.action ||
+                          copilot.sales_strategy ||
+                          "Contact and qualify this lead"}
+                      </h3>
+                    </div>
+
+                    <span
+                      className={`w-fit rounded-full px-3 py-1 text-xs font-bold ${
+                        String(copilot.priority || "NORMAL").toUpperCase() === "HIGH"
+                          ? "bg-red-100 text-red-700"
+                          : String(copilot.priority || "NORMAL").toUpperCase() === "MEDIUM"
+                            ? "bg-orange-100 text-orange-700"
+                            : "bg-slate-100 text-slate-700"
+                      }`}
+                    >
+                      {copilot.priority || "NORMAL"}
+                    </span>
+
+                  </div>
+
+                  {(nextAction?.reason || copilot.summary) && (
+                    <p className="mb-4 text-sm leading-6 text-violet-900">
+                      {nextAction?.reason || copilot.summary}
+                    </p>
+                  )}
+
+                  <div className="flex flex-wrap gap-3">
+
+                    <button
+                      type="button"
+                      onClick={handleAICall}
+                      disabled={!lead.phone}
+                      className="flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      📞 Call Lead
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleAIWhatsApp}
+                      disabled={!lead.phone}
+                      className="flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <MessageCircle size={16} />
+                      WhatsApp
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleAIScheduleFollowUp}
+                      disabled={followUpLoading}
+                      className="flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {followUpLoading ? (
+                        <>
+                          <RefreshCw size={16} className="animate-spin" />
+                          Scheduling...
+                        </>
+                      ) : (
+                        <>📅 Schedule Follow-up</>
+                      )}
+                    </button>
 
                   </div>
 

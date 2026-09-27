@@ -6,3 +6,5 @@ __all__ = [
     "Lead",
     "LeadActivity",
 ]
+from backend.app.models.audit_log import AuditLog
+from backend.app.models.notification import Notification
