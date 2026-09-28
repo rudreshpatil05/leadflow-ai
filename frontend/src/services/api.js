@@ -438,5 +438,67 @@ export const getAutomationStats = async () => {
 // ============================================================
 // DEFAULT API
 // ============================================================
+export const initializeAutomation = async () => {
+  const response = await api.post("/automation/initialize");
+  return response.data;
+};
 
+export const getAutomationRules = async () => {
+  const response = await api.get("/automation/rules");
+  return response.data;
+};
+
+export const updateAutomationRule = async (ruleId, isActive) => {
+  const response = await api.patch(
+    `/automation/rules/${ruleId}`,
+    null,
+    {
+      params: {
+        is_active: isActive,
+      },
+    }
+  );
+
+  return response.data;
+};
+
+export const runLeadAutomation = async (
+  leadId,
+  eventType = "LEAD_CREATED"
+) => {
+  const response = await api.post(
+    `/automation/leads/${leadId}/run`,
+    null,
+    {
+      params: {
+        event_type: eventType,
+      },
+    }
+  );
+
+  return response.data;
+};
+
+export const getAutomationLogs = async (leadId = null) => {
+  const params = {};
+
+  if (leadId) {
+    params.lead_id = leadId;
+  }
+
+  const response = await api.get(
+    "/automation/logs",
+    { params }
+  );
+
+  return response.data;
+};
+
+export const generateAIFollowUp = async (leadId) => {
+  const response = await api.post(
+    `/automation/leads/${leadId}/ai-follow-up`
+  );
+
+  return response.data;
+};
 export default API

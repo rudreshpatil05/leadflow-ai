@@ -10,7 +10,7 @@ from backend.app.api.v1.leads import router as leads_router
 from backend.app.api.v1.follow_ups import router as follow_ups_router
 from backend.app.api.v1.next_actions import router as next_actions_router
 from backend.app.api.v1.production import router as production_router
-
+from backend.app.api.v1.automation import router as automation_v1_router
 from backend.app.routers.sales_assistant import router as sales_assistant_router
 from backend.app.routers.automation import router as automation_router
 
@@ -37,7 +37,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
+app.include_router(
+    automation_v1_router,
+    prefix="/api/v1",
+)
 # =========================================================
 # API ROUTERS
 # =========================================================
