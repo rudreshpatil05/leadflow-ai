@@ -116,6 +116,7 @@ export const completeFollowUp = async (followUpId) => {
 
   return response.data
 }
+
 export const createManualFollowUp = async (
   leadId,
   followUpType,
@@ -123,13 +124,44 @@ export const createManualFollowUp = async (
   action,
   reason
 ) => {
-  const response = await API.post(`/follow-ups/lead/${leadId}`, {
-    follow_up_type: followUpType,
-    scheduled_at: scheduledAt,
-    action,
-    reason,
-  })
+  const response = await API.post(
+    `/follow-ups/lead/${leadId}`,
+    {
+      follow_up_type: followUpType,
+      scheduled_at: scheduledAt,
+      action,
+      reason,
+    }
+  )
+const handleAIWhatsApp = async () => {
+  if (!lead?.phone) return
 
+  const message =
+    copilot?.whatsapp_message ||
+    generatedMessage?.message ||
+    ""
+
+  openWhatsApp(message)
+
+  try {
+    await createLeadActivity(
+      lead.id,
+      "AI_WHATSAPP_SENT",
+      "AI-generated WhatsApp message opened for lead communication."
+    )
+
+    const updatedActivities =
+      await getLeadActivities(lead.id)
+
+    setActivities(updatedActivities)
+
+  } catch (error) {
+    console.error(
+      "Failed to record AI WhatsApp activity:",
+      error
+    )
+  }
+}
   return response.data
 }
 
@@ -148,15 +180,15 @@ export const getLeadNextAction = async (leadId) => {
 
 
 // ===============================
-// AI SALES COPILOT
+// AI SALES ASSISTANT / COPILOT
 // ===============================
 
 export const getSalesCopilot = async (leadId) => {
   const response = await API.get(
-    `/leads/${leadId}/sales-copilot`
+    `/sales-assistant/${leadId}`
   )
 
-  return response.data
+  return response.data?.result || response.data
 }
 
 
@@ -205,24 +237,34 @@ export const getWhatsAppUrl = (
 
   return `https://wa.me/${normalizedPhone}?text=${encodedMessage}`
 }
-export async function getSalesAnalytics() {
-  const response = await api.get(
-    "/api/v1/dashboard/sales-analytics"
+
+
+// ============================================================
+// SALES ANALYTICS
+// ============================================================
+
+export const getSalesAnalytics = async () => {
+  const response = await API.get(
+    "/dashboard/sales-analytics"
   )
 
   return response.data
 }
 
-// ===============================
-// DEFAULT API
-// ===============================
 
-
+// ============================================================
+// STEP 31 - SOURCE PERFORMANCE
+// ============================================================
 
 export const getSourcePerformance = async () => {
-  const response = await API.get("/dashboard/source-performance")
+  const response = await API.get(
+    "/dashboard/source-performance"
+  )
+
   return response.data
 }
+
+
 // ============================================================
 // STEP 32 - REVENUE TREND
 // ============================================================
@@ -273,28 +315,190 @@ export const getSalesAlerts = async () => {
 
   return response.data
 }
+
+
+// ============================================================
+// STEP 37 - LEAD INTELLIGENCE
+// ============================================================
+
 export const getLeadIntelligence = async () => {
-  const response = await API.get("/dashboard/lead-intelligence")
+  const response = await API.get(
+    "/dashboard/lead-intelligence"
+  )
+
   return response.data
 }
+
+
+// ============================================================
+// STEP 38 - FOLLOW-UP INTELLIGENCE
+// ============================================================
 
 export const getFollowUpIntelligence = async () => {
-  const response = await API.get("/dashboard/follow-up-intelligence")
+  const response = await API.get(
+    "/dashboard/follow-up-intelligence"
+  )
+
   return response.data
 }
+
+
+// ============================================================
+// STEP 39 - REVENUE FORECAST
+// ============================================================
 
 export const getRevenueForecast = async () => {
-  const response = await API.get("/dashboard/revenue-forecast")
+  const response = await API.get(
+    "/dashboard/revenue-forecast"
+  )
+
   return response.data
 }
+
+
+// ============================================================
+// STEP 40 - SALES PRODUCTIVITY
+// ============================================================
 
 export const getSalesProductivity = async () => {
-  const response = await API.get("/dashboard/sales-productivity")
+  const response = await API.get(
+    "/dashboard/sales-productivity"
+  )
+
   return response.data
 }
 
+
+// ============================================================
+// STEP 41 - LEAD FILTER OPTIONS
+// ============================================================
+
 export const getLeadFilterOptions = async () => {
-  const response = await API.get("/dashboard/lead-filter-options")
+  const response = await API.get(
+    "/dashboard/lead-filter-options"
+  )
+
   return response.data
 }
+const handleAICall = async () => {
+  if (!lead?.phone) return
+
+  const cleanPhone = String(
+    lead.phone
+  ).replace(/\D/g, "")
+
+  window.location.href = `tel:${cleanPhone}`
+
+  try {
+    await createLeadActivity(
+      lead.id,
+      "AI_CALL_INITIATED",
+      "Call initiated from AI recommended sales action."
+    )
+
+    const updatedActivities =
+      await getLeadActivities(lead.id)
+
+    setActivities(updatedActivities)
+
+  } catch (error) {
+    console.error(
+      "Failed to record AI call activity:",
+      error
+    )
+  }
+}
+// ============================================================
+// AUTOMATION
+// ============================================================
+
+export const runLeadAutomation = async (leadId) => {
+  const response = await API.post(
+    `/automation/lead/${leadId}/run`
+  )
+
+  return response.data
+}
+
+
+export const getAutomationRules = async () => {
+  const response = await API.get(
+    "/automation/rules"
+  )
+
+  return response.data
+}
+export const getAutomationStats = async () => {
+  const response = await API.get(
+    "/automation/stats"
+  )
+
+  return response.data
+}
+// ============================================================
+// DEFAULT API
+// ============================================================
+export const initializeAutomation = async () => {
+  const response = await api.post("/automation/initialize");
+  return response.data;
+};
+
+export const getAutomationRules = async () => {
+  const response = await api.get("/automation/rules");
+  return response.data;
+};
+
+export const updateAutomationRule = async (ruleId, isActive) => {
+  const response = await api.patch(
+    `/automation/rules/${ruleId}`,
+    null,
+    {
+      params: {
+        is_active: isActive,
+      },
+    }
+  );
+
+  return response.data;
+};
+
+export const runLeadAutomation = async (
+  leadId,
+  eventType = "LEAD_CREATED"
+) => {
+  const response = await api.post(
+    `/automation/leads/${leadId}/run`,
+    null,
+    {
+      params: {
+        event_type: eventType,
+      },
+    }
+  );
+
+  return response.data;
+};
+
+export const getAutomationLogs = async (leadId = null) => {
+  const params = {};
+
+  if (leadId) {
+    params.lead_id = leadId;
+  }
+
+  const response = await api.get(
+    "/automation/logs",
+    { params }
+  );
+
+  return response.data;
+};
+
+export const generateAIFollowUp = async (leadId) => {
+  const response = await api.post(
+    `/automation/leads/${leadId}/ai-follow-up`
+  );
+
+  return response.data;
+};
 export default API

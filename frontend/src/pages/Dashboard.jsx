@@ -20,10 +20,19 @@ import {
 import {
   getDashboardStats,
   getSourceAnalytics,
-  getSourcePerformance,
   getDashboardFollowUps,
   getLeads,
   getSalesAnalytics,
+  getSourcePerformance,
+  getRevenueTrend,
+  getConversionFunnel,
+  getLeadAging,
+  getSalesAlerts,
+  getLeadIntelligence,
+  getFollowUpIntelligence,
+  getRevenueForecast,
+  getSalesProductivity,
+  getLeadFilterOptions,
 } from "../services/api"
 
 
@@ -309,11 +318,61 @@ function InsightCard({ title, value, description }) {
 function Dashboard() {
   const [stats, setStats] = useState(null)
   const [sourceAnalytics, setSourceAnalytics] = useState([])
-  const [sourcePerformance, setSourcePerformance] = useState([])
   const [leads, setLeads] = useState([])
   const [followUps, setFollowUps] = useState([])
   const [salesAnalytics, setSalesAnalytics] = useState(null)
+  const [sourcePerformance, setSourcePerformance] = useState([])
+  const [revenueTrend, setRevenueTrend] = useState([])
+  const [conversionFunnel, setConversionFunnel] = useState([])
+  const [leadAging, setLeadAging] = useState({
+    fresh: 0,
+    attention: 0,
+    stale: 0,
+    critical: 0,
+  })
+  const [staleLeads, setStaleLeads] = useState([])
+  const [salesAlerts, setSalesAlerts] = useState([])
+  const [alertSummary, setAlertSummary] = useState({})
 
+  const [leadIntelligence, setLeadIntelligence] = useState({
+    hot: 0,
+    warm: 0,
+    cold: 0,
+    total_active: 0,
+  })
+  const [priorityLeads, setPriorityLeads] = useState([])
+  const [followUpIntelligence, setFollowUpIntelligence] = useState({
+    overdue: 0,
+    today: 0,
+    upcoming: 0,
+    completed: 0,
+    completion_rate: 0,
+  })
+  const [revenueForecast, setRevenueForecast] = useState({
+    converted_revenue: 0,
+    pipeline_value: 0,
+    forecast_value: 0,
+    components: {
+      qualified: 0,
+      interested: 0,
+      negotiation: 0,
+    },
+  })
+  const [salesProductivity, setSalesProductivity] = useState({
+    total_leads: 0,
+    active_leads: 0,
+    converted_leads: 0,
+    lost_leads: 0,
+    conversion_rate: 0,
+  })
+  const [leadFilterOptions, setLeadFilterOptions] = useState({
+    statuses: [],
+    temperatures: [],
+    sources: [],
+    locations: [],
+  })
+
+ 
   
   const [search, setSearch] = useState("")
   const [temperature, setTemperature] = useState("ALL")
@@ -339,14 +398,32 @@ function Dashboard() {
         salesAnalyticsResponse,
         sourceResponse,
         sourcePerformanceResponse,
+        revenueTrendResponse,
+        conversionFunnelResponse,
+        leadAgingResponse,
+        salesAlertsResponse,
         followUpsResponse,
+        leadIntelligenceResponse,
+        followUpIntelligenceResponse,
+        revenueForecastResponse,
+        salesProductivityResponse,
+        leadFilterOptionsResponse,
       ] = await Promise.all([
         getDashboardStats(),
         getLeads(),
         getSalesAnalytics(),
         getSourceAnalytics(),
         getSourcePerformance(),
+        getRevenueTrend(),
+        getConversionFunnel(),
+        getLeadAging(),
+        getSalesAlerts(),
         getDashboardFollowUps(),
+        getLeadIntelligence(),
+        getFollowUpIntelligence(),
+        getRevenueForecast(),
+        getSalesProductivity(),
+        getLeadFilterOptions(),
       ])
 
       setStats(dashboardStats || {})
@@ -361,7 +438,7 @@ function Dashboard() {
       } else {
         setLeads([])
       }
-
+      
       if (Array.isArray(sourceResponse)) {
         setSourceAnalytics(sourceResponse)
       } else if (Array.isArray(sourceResponse?.items)) {
@@ -370,14 +447,6 @@ function Dashboard() {
         setSourceAnalytics(sourceResponse.sources)
       } else {
         setSourceAnalytics([])
-      }
-
-      if (Array.isArray(sourcePerformanceResponse?.sources)) {
-        setSourcePerformance(sourcePerformanceResponse.sources)
-      } else if (Array.isArray(sourcePerformanceResponse)) {
-        setSourcePerformance(sourcePerformanceResponse)
-      } else {
-        setSourcePerformance([])
       }
 
       if (Array.isArray(followUpsResponse)) {
@@ -389,6 +458,104 @@ function Dashboard() {
       } else {
         setFollowUps([])
       }
+
+      setLeadIntelligence(
+        leadIntelligenceResponse?.summary || {
+          hot: 0,
+          warm: 0,
+          cold: 0,
+          total_active: 0,
+        }
+      )
+      setPriorityLeads(
+        Array.isArray(leadIntelligenceResponse?.priority_leads)
+          ? leadIntelligenceResponse.priority_leads
+          : []
+      )
+
+      setFollowUpIntelligence(
+        followUpIntelligenceResponse?.summary || {
+          overdue: 0,
+          today: 0,
+          upcoming: 0,
+          completed: 0,
+          completion_rate: 0,
+        }
+      )
+
+      setRevenueForecast(
+        revenueForecastResponse || {
+          converted_revenue: 0,
+          pipeline_value: 0,
+          forecast_value: 0,
+          components: {
+            qualified: 0,
+            interested: 0,
+            negotiation: 0,
+          },
+        }
+      )
+
+      setSalesProductivity(
+        salesProductivityResponse || {
+          total_leads: 0,
+          active_leads: 0,
+          converted_leads: 0,
+          lost_leads: 0,
+          conversion_rate: 0,
+        }
+      )
+
+      setLeadFilterOptions(
+        leadFilterOptionsResponse || {
+          statuses: [],
+          temperatures: [],
+          sources: [],
+          locations: [],
+        }
+      )
+
+      if (Array.isArray(revenueTrendResponse?.trend)) {
+        setRevenueTrend(revenueTrendResponse.trend)
+      } else if (Array.isArray(revenueTrendResponse)) {
+        setRevenueTrend(revenueTrendResponse)
+      } else {
+        setRevenueTrend([])
+      }
+
+      if (Array.isArray(conversionFunnelResponse?.funnel)) {
+        setConversionFunnel(conversionFunnelResponse.funnel)
+      } else if (Array.isArray(conversionFunnelResponse)) {
+        setConversionFunnel(conversionFunnelResponse)
+      } else {
+        setConversionFunnel([])
+      }
+
+      if (leadAgingResponse?.summary) {
+        setLeadAging({
+          fresh: Number(leadAgingResponse.summary.fresh || 0),
+          attention: Number(leadAgingResponse.summary.attention || 0),
+          stale: Number(leadAgingResponse.summary.stale || 0),
+          critical: Number(leadAgingResponse.summary.critical || 0),
+        })
+      } else {
+        setLeadAging({ fresh: 0, attention: 0, stale: 0, critical: 0 })
+      }
+
+      setStaleLeads(
+        Array.isArray(leadAgingResponse?.stale_leads)
+          ? leadAgingResponse.stale_leads
+          : []
+      )
+
+      setSalesAlerts(
+        Array.isArray(salesAlertsResponse?.alerts)
+          ? salesAlertsResponse.alerts
+          : Array.isArray(salesAlertsResponse)
+            ? salesAlertsResponse
+            : []
+      )
+      setAlertSummary(salesAlertsResponse?.summary || {})
     } catch (error) {
       console.error("Dashboard loading failed:", error)
     } finally {
@@ -760,10 +927,30 @@ function Dashboard() {
   const coldCount =
     stats?.cold ??
     stats?.cold_leads ??
+    salesInsights.cold ??
     leads.filter(
       (lead) =>
         normalizeTemperature(lead.temperature) === "COLD"
     ).length
+
+  const maxRevenueTrendValue = Math.max(
+    ...revenueTrend.map((item) => Number(item.revenue || 0)),
+    1
+  )
+
+  const maxFunnelCount = Math.max(
+    ...conversionFunnel.map((item) => Number(item.count || 0)),
+    1
+  )
+
+  const totalAgingLeads =
+    Number(leadAging.fresh || 0) +
+    Number(leadAging.attention || 0) +
+    Number(leadAging.stale || 0) +
+    Number(leadAging.critical || 0)
+
+  const formatCurrency = (value) =>
+    `₹${Number(value || 0).toLocaleString("en-IN")}`
 
 
   return (
@@ -830,9 +1017,9 @@ function Dashboard() {
         </div>
 
 
-        {/* STEP 29 - SALES PERFORMANCE */}
+        {/* STEP 30 - PIPELINE & REVENUE BREAKDOWN */}
         <section className="mb-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-          <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <div className="flex items-center gap-2">
                 <div className="rounded-lg bg-gray-100 p-2">
@@ -848,62 +1035,406 @@ function Dashboard() {
               </div>
 
               <p className="mt-1 text-sm text-gray-500">
-                Track conversion performance and revenue generated.
+                Track pipeline movement, conversion and revenue.
               </p>
             </div>
 
-            <div className="text-sm text-gray-500">
-              {salesAnalytics?.conversion_rate ?? 0}% conversion rate
+            <div className="rounded-full bg-gray-100 px-3 py-1.5 text-sm font-semibold text-gray-700">
+              {salesAnalytics?.conversion_rate ?? 0}% conversion
             </div>
           </div>
 
-
+          {/* PERFORMANCE KPIs */}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <InsightCard
               title="Active Leads"
               value={salesAnalytics?.active_leads ?? 0}
-              description="Leads currently in pipeline"
+              description="Currently in sales pipeline"
             />
 
             <InsightCard
               title="Converted"
               value={salesAnalytics?.converted_leads ?? 0}
-              description="Successfully closed leads"
+              description="Successfully closed"
             />
 
             <InsightCard
               title="Lost"
               value={salesAnalytics?.lost_leads ?? 0}
-              description="Leads marked as lost"
+              description="Marked as lost"
             />
 
             <InsightCard
               title="Conversion Rate"
               value={`${salesAnalytics?.conversion_rate ?? 0}%`}
-              description="Converted leads / total leads"
+              description="Converted / total leads"
             />
           </div>
 
-
+          {/* REVENUE KPIs */}
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            <InsightCard
-              title="Total Deal Value"
-              value={`₹${Number(
-                salesAnalytics?.total_deal_value ?? 0
-              ).toLocaleString("en-IN")}`}
-              description="Combined value of converted deals"
-            />
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                Total Revenue
+              </p>
 
-            <InsightCard
-              title="Average Deal Value"
-              value={`₹${Number(
-                salesAnalytics?.average_deal_value ?? 0
-              ).toLocaleString("en-IN")}`}
-              description="Average value per converted deal"
-            />
+              <p className="mt-2 text-2xl font-bold text-gray-900">
+                ₹{Number(
+                  salesAnalytics?.total_deal_value ?? 0
+                ).toLocaleString("en-IN")}
+              </p>
+
+              <p className="mt-1 text-xs text-gray-500">
+                Combined value of converted deals
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                Average Deal Value
+              </p>
+
+              <p className="mt-2 text-2xl font-bold text-gray-900">
+                ₹{Number(
+                  salesAnalytics?.average_deal_value ?? 0
+                ).toLocaleString("en-IN")}
+              </p>
+
+              <p className="mt-1 text-xs text-gray-500">
+                Average revenue per converted lead
+              </p>
+            </div>
+          </div>
+
+          {/* PIPELINE BREAKDOWN */}
+          <div className="mt-5 rounded-xl border border-gray-200 p-4">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-bold text-gray-900">
+                  Pipeline Breakdown
+                </h3>
+
+                <p className="mt-1 text-xs text-gray-500">
+                  Click any stage to filter the lead table below.
+                </p>
+              </div>
+
+              <span className="text-xs font-semibold text-gray-500">
+                {salesAnalytics?.total_leads ?? pipelineStats.total} total
+              </span>
+            </div>
+
+            <div className="space-y-3">
+              {PIPELINE_STAGES.map((stage) => {
+                const count = Number(
+                  salesAnalytics?.pipeline?.[stage.key] ??
+                    pipelineStats.counts[stage.key] ??
+                    0
+                )
+
+                const total = Number(
+                  salesAnalytics?.total_leads ??
+                    pipelineStats.total ??
+                    0
+                )
+
+                const percentage =
+                  total > 0
+                    ? Math.round((count / total) * 100)
+                    : 0
+
+                const isSelected = status === stage.key
+
+                return (
+                  <button
+                    key={stage.key}
+                    type="button"
+                    onClick={() =>
+                      handlePipelineStageClick(stage.key)
+                    }
+                    className="block w-full text-left"
+                  >
+                    <div className="mb-1.5 flex items-center justify-between gap-3">
+                      <span
+                        className={`text-xs font-semibold ${
+                          isSelected
+                            ? "text-gray-900"
+                            : "text-gray-600"
+                        }`}
+                      >
+                        {stage.label}
+                      </span>
+
+                      <span className="text-xs font-semibold text-gray-500">
+                        {count} · {percentage}%
+                      </span>
+                    </div>
+
+                    <div className="h-2 overflow-hidden rounded-full bg-gray-100">
+                      <div
+                        className={`h-full rounded-full transition-all ${
+                          isSelected
+                            ? "bg-gray-900"
+                            : "bg-gray-500"
+                        }`}
+                        style={{
+                          width: `${Math.min(
+                            percentage,
+                            100
+                          )}%`,
+                        }}
+                      />
+                    </div>
+                  </button>
+                )
+              })}
+
+              {/* LOST */}
+              {(() => {
+                const count = Number(
+                  salesAnalytics?.pipeline?.LOST ??
+                    pipelineStats.lost ??
+                    0
+                )
+
+                const total = Number(
+                  salesAnalytics?.total_leads ??
+                    pipelineStats.total ??
+                    0
+                )
+
+                const percentage =
+                  total > 0
+                    ? Math.round((count / total) * 100)
+                    : 0
+
+                const isSelected = status === "LOST"
+
+                return (
+                  <button
+                    type="button"
+                    onClick={handleLostClick}
+                    className="block w-full text-left"
+                  >
+                    <div className="mb-1.5 flex items-center justify-between gap-3">
+                      <span
+                        className={`text-xs font-semibold ${
+                          isSelected
+                            ? "text-red-700"
+                            : "text-gray-600"
+                        }`}
+                      >
+                        Lost
+                      </span>
+
+                      <span className="text-xs font-semibold text-gray-500">
+                        {count} · {percentage}%
+                      </span>
+                    </div>
+
+                    <div className="h-2 overflow-hidden rounded-full bg-gray-100">
+                      <div
+                        className="h-full rounded-full bg-red-400 transition-all"
+                        style={{
+                          width: `${Math.min(
+                            percentage,
+                            100
+                          )}%`,
+                        }}
+                      />
+                    </div>
+                  </button>
+                )
+              })()}
+            </div>
           </div>
         </section>
 
+
+        {/* ============================================================
+            STEP 37 - LEAD INTELLIGENCE
+        ============================================================ */}
+        <section className="mb-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+          <div className="mb-4">
+            <h2 className="text-lg font-bold text-gray-900">Lead Intelligence</h2>
+            <p className="mt-1 text-sm text-gray-500">Understand active lead quality and priority opportunities.</p>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <InsightCard title="Hot Leads" value={leadIntelligence.hot} description="High-priority active leads" />
+            <InsightCard title="Warm Leads" value={leadIntelligence.warm} description="Leads requiring nurturing" />
+            <InsightCard title="Cold Leads" value={leadIntelligence.cold} description="Lower-priority active leads" />
+            <InsightCard title="Active Leads" value={leadIntelligence.total_active} description="Open opportunities" />
+          </div>
+
+          <div className="mt-5">
+            <div className="mb-3 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-gray-900">Priority Leads</h3>
+                <p className="mt-1 text-xs text-gray-500">Highest-scoring active opportunities.</p>
+              </div>
+              <span className="text-xs font-semibold text-gray-500">Top {priorityLeads.length}</span>
+            </div>
+
+            {priorityLeads.length === 0 ? (
+              <div className="rounded-xl bg-gray-50 p-5 text-center text-sm text-gray-500">No priority leads available.</div>
+            ) : (
+              <div className="space-y-2">
+                {priorityLeads.map((lead) => (
+                  <Link key={lead.id} to={`/leads/${lead.id}`} className="block rounded-xl border border-gray-200 p-4 transition hover:border-gray-400 hover:shadow-sm">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-semibold text-gray-900">{lead.name}</span>
+                          <TemperatureBadge temperature={lead.temperature} />
+                          <PriorityBadge score={lead.score} />
+                        </div>
+                        <p className="mt-1 text-xs text-gray-500">{lead.phone}{lead.location ? ` · ${lead.location}` : ""}</p>
+                      </div>
+                      <div className="flex items-center gap-5 text-right">
+                        <div><p className="text-xs text-gray-500">Score</p><p className="font-bold text-gray-900">{lead.score}</p></div>
+                        <div><p className="text-xs text-gray-500">Budget</p><p className="font-semibold text-gray-900">{formatCurrency(lead.budget_max)}</p></div>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* STEP 38 - FOLLOW-UP INTELLIGENCE */}
+        <section className="mb-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+          <div className="mb-4">
+            <h2 className="text-lg font-bold text-gray-900">Follow-up Intelligence</h2>
+            <p className="mt-1 text-sm text-gray-500">Monitor overdue, current and upcoming sales follow-ups.</p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <InsightCard title="Overdue" value={followUpIntelligence.overdue} description="Needs immediate action" />
+            <InsightCard title="Today" value={followUpIntelligence.today} description="Scheduled today" />
+            <InsightCard title="Upcoming" value={followUpIntelligence.upcoming} description="Future follow-ups" />
+            <InsightCard title="Completed" value={followUpIntelligence.completed} description="Completed follow-ups" />
+            <InsightCard title="Completion Rate" value={`${followUpIntelligence.completion_rate}%`} description="Follow-up completion" />
+          </div>
+        </section>
+
+        {/* STEP 39 - REVENUE FORECAST */}
+        <section className="mb-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+          <div className="mb-4">
+            <h2 className="text-lg font-bold text-gray-900">Revenue Forecast</h2>
+            <p className="mt-1 text-sm text-gray-500">Current revenue and probability-weighted active pipeline.</p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <InsightCard title="Converted Revenue" value={formatCurrency(revenueForecast.converted_revenue)} description="Recorded closed-deal revenue" />
+            <InsightCard title="Active Pipeline" value={formatCurrency(revenueForecast.pipeline_value)} description="Potential active pipeline" />
+            <InsightCard title="Weighted Forecast" value={formatCurrency(revenueForecast.forecast_value)} description="Probability-weighted pipeline" />
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-xl bg-gray-50 p-4"><p className="text-xs text-gray-500">Qualified · 20%</p><p className="mt-1 font-bold text-gray-900">{formatCurrency(revenueForecast.components?.qualified)}</p></div>
+            <div className="rounded-xl bg-gray-50 p-4"><p className="text-xs text-gray-500">Interested · 40%</p><p className="mt-1 font-bold text-gray-900">{formatCurrency(revenueForecast.components?.interested)}</p></div>
+            <div className="rounded-xl bg-gray-50 p-4"><p className="text-xs text-gray-500">Negotiation · 70%</p><p className="mt-1 font-bold text-gray-900">{formatCurrency(revenueForecast.components?.negotiation)}</p></div>
+          </div>
+        </section>
+
+        {/* STEP 40 - SALES PRODUCTIVITY */}
+        <section className="mb-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+          <div className="mb-4">
+            <h2 className="text-lg font-bold text-gray-900">Sales Productivity</h2>
+            <p className="mt-1 text-sm text-gray-500">Overall CRM sales performance.</p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <InsightCard title="Total Leads" value={salesProductivity.total_leads} description="All CRM leads" />
+            <InsightCard title="Active" value={salesProductivity.active_leads} description="Open opportunities" />
+            <InsightCard title="Converted" value={salesProductivity.converted_leads} description="Closed deals" />
+            <InsightCard title="Lost" value={salesProductivity.lost_leads} description="Lost opportunities" />
+            <InsightCard title="Conversion Rate" value={`${salesProductivity.conversion_rate}%`} description="Overall conversion" />
+          </div>
+        </section>
+
+        {/* STEP 41 - ANALYTICS DETAIL */}
+        <section className="mb-6 grid gap-6 lg:grid-cols-2">
+          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+            <div className="mb-4"><h2 className="text-lg font-bold text-gray-900">Revenue & Conversion Trend</h2><p className="mt-1 text-sm text-gray-500">Daily lead, conversion and revenue movement.</p></div>
+            {revenueTrend.length === 0 ? (
+              <div className="rounded-xl bg-gray-50 p-6 text-center text-sm text-gray-500">No trend data available.</div>
+            ) : (
+              <div className="space-y-3">
+                {revenueTrend.slice(-7).map((item) => {
+                  const revenue = Number(item.revenue || 0)
+                  const width = Math.max((revenue / maxRevenueTrendValue) * 100, revenue > 0 ? 4 : 0)
+                  return (
+                    <div key={item.date}>
+                      <div className="mb-1 flex items-center justify-between text-xs">
+                        <span className="font-semibold text-gray-700">{formatDate(item.date)}</span>
+                        <span className="text-gray-500">{item.leads || 0} leads · {item.converted || 0} converted · {formatCurrency(revenue)}</span>
+                      </div>
+                      <div className="h-2 overflow-hidden rounded-full bg-gray-100"><div className="h-full rounded-full bg-gray-700" style={{ width: `${width}%` }} /></div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+            <div className="mb-4"><h2 className="text-lg font-bold text-gray-900">Conversion Funnel</h2><p className="mt-1 text-sm text-gray-500">Lead movement through the sales stages.</p></div>
+            {conversionFunnel.length === 0 ? (
+              <div className="rounded-xl bg-gray-50 p-6 text-center text-sm text-gray-500">No funnel data available.</div>
+            ) : (
+              <div className="space-y-3">
+                {conversionFunnel.map((item) => {
+                  const count = Number(item.count || 0)
+                  const width = Math.max((count / maxFunnelCount) * 100, count > 0 ? 4 : 0)
+                  return (
+                    <button key={item.stage} type="button" onClick={() => setStatus(item.stage)} className="block w-full text-left">
+                      <div className="mb-1 flex items-center justify-between text-xs"><span className="font-semibold text-gray-700">{formatStatus(item.stage)}</span><span className="text-gray-500">{count} · {Number(item.overall_percentage || 0)}%</span></div>
+                      <div className="h-2 overflow-hidden rounded-full bg-gray-100"><div className="h-full rounded-full bg-gray-700" style={{ width: `${width}%` }} /></div>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* STEP 42 - LEAD AGING & SMART ALERTS */}
+        <section className="mb-6 grid gap-6 lg:grid-cols-2">
+          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+            <div className="mb-4"><h2 className="text-lg font-bold text-gray-900">Lead Aging</h2><p className="mt-1 text-sm text-gray-500">Identify leads that have not been updated recently.</p></div>
+            <div className="grid grid-cols-2 gap-3">
+              <InsightCard title="Fresh" value={leadAging.fresh} description="0–2 days" />
+              <InsightCard title="Attention" value={leadAging.attention} description="3–5 days" />
+              <InsightCard title="Stale" value={leadAging.stale} description="6–7 days" />
+              <InsightCard title="Critical" value={leadAging.critical} description="8+ days" />
+            </div>
+            <p className="mt-4 text-xs text-gray-500">{totalAgingLeads} active leads classified by age.</p>
+            {staleLeads.length > 0 && (
+              <div className="mt-4 space-y-2">
+                {staleLeads.slice(0, 5).map((lead) => (
+                  <Link key={lead.id} to={`/leads/${lead.id}`} className="flex items-center justify-between rounded-lg border border-gray-100 p-3 hover:bg-gray-50">
+                    <div><p className="text-sm font-semibold text-gray-800">{lead.name}</p><p className="text-xs text-gray-500">{lead.status} · Score {lead.score}</p></div>
+                    <span className="text-xs font-bold text-gray-600">{lead.age_days}d</span>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+            <div className="mb-4"><h2 className="text-lg font-bold text-gray-900">Smart Sales Alerts</h2><p className="mt-1 text-sm text-gray-500">Signals that may require sales attention.</p></div>
+            {salesAlerts.length === 0 ? (
+              <div className="rounded-xl bg-gray-50 p-6 text-center text-sm text-gray-500">No active sales alerts.</div>
+            ) : (
+              <div className="space-y-3">
+                {salesAlerts.map((alert, index) => (
+                  <div key={`${alert.type || "alert"}-${index}`} className="rounded-xl border border-gray-200 p-4">
+                    <div className="flex items-start gap-3"><AlertCircle size={18} className="mt-0.5 text-gray-600" /><div><p className="font-semibold text-gray-900">{alert.title}</p><p className="mt-1 text-sm text-gray-500">{alert.description}</p></div></div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
 
         {/* STEP 27 - SALES PIPELINE */}
         <section className="mb-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
@@ -1199,139 +1730,63 @@ function Dashboard() {
         </section>
 
 
-        {/* STEP 31 - SALES SOURCE PERFORMANCE */}
+        {/* SOURCE ANALYTICS */}
         <section className="mb-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-          <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="text-lg font-bold text-gray-900">
-                Sales by Source
-              </h2>
+          <div className="mb-4">
+            <h2 className="text-lg font-bold text-gray-900">
+              Lead Sources
+            </h2>
 
-              <p className="text-sm text-gray-500">
-                Compare lead quality, conversions and revenue across acquisition sources.
-              </p>
-            </div>
-
-            <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-              Source Performance
-            </span>
+            <p className="text-sm text-gray-500">
+              Understand where your leads are coming from.
+            </p>
           </div>
 
           {analyticsLoading ? (
             <div className="py-8 text-center text-sm text-gray-500">
-              Loading source performance...
+              Loading source analytics...
             </div>
-          ) : sourcePerformance.length === 0 ? (
+          ) : sourceAnalytics.length === 0 ? (
             <div className="rounded-xl bg-gray-50 p-6 text-center text-sm text-gray-500">
-              No source performance data available.
+              No source analytics available.
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[900px] text-left">
-                <thead className="border-b bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Source
-                    </th>
-                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Total Leads
-                    </th>
-                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Converted
-                    </th>
-                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Lost
-                    </th>
-                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Conversion
-                    </th>
-                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Revenue
-                    </th>
-                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Avg Deal
-                    </th>
-                  </tr>
-                </thead>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {sourceAnalytics.map((item, index) => {
+                const name =
+                  item.source ||
+                  item.name ||
+                  item.label ||
+                  "Unknown"
 
-                <tbody>
-                  {sourcePerformance.map((item) => {
-                    const itemSource = String(item.source || "UNKNOWN")
-                    const total = Number(item.total_leads || 0)
-                    const converted = Number(item.converted_leads || 0)
-                    const lost = Number(item.lost_leads || 0)
-                    const conversionRate = Number(item.conversion_rate || 0)
-                    const revenue = Number(item.total_deal_value || 0)
-                    const averageDeal = Number(item.average_deal_value || 0)
-                    const isSelected = source === itemSource
+                const count =
+                  Number(
+                    item.count ??
+                      item.total ??
+                      item.leads ??
+                      item.value ??
+                      0
+                  )
 
-                    return (
-                      <tr
-                        key={itemSource}
-                        className={`border-b last:border-b-0 ${
-                          isSelected ? "bg-gray-50" : "hover:bg-gray-50"
-                        }`}
-                      >
-                        <td className="px-4 py-4">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setSource(isSelected ? "ALL" : itemSource)
-                            }
-                            className={`font-semibold hover:underline ${
-                              isSelected ? "text-gray-900" : "text-gray-700"
-                            }`}
-                          >
-                            {itemSource}
-                          </button>
-                        </td>
+                return (
+                  <div
+                    key={`${name}-${index}`}
+                    className="rounded-xl border border-gray-200 p-4"
+                  >
+                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      {name}
+                    </p>
 
-                        <td className="px-4 py-4 text-sm font-semibold text-gray-900">
-                          {total}
-                        </td>
+                    <p className="mt-2 text-2xl font-bold text-gray-900">
+                      {count}
+                    </p>
 
-                        <td className="px-4 py-4 text-sm font-semibold text-gray-900">
-                          {converted}
-                        </td>
-
-                        <td className="px-4 py-4 text-sm font-semibold text-gray-900">
-                          {lost}
-                        </td>
-
-                        <td className="px-4 py-4">
-                          <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-700">
-                            {conversionRate.toFixed(2)}%
-                          </span>
-                        </td>
-
-                        <td className="px-4 py-4 text-sm font-semibold text-gray-900">
-                          ₹{revenue.toLocaleString("en-IN")}
-                        </td>
-
-                        <td className="px-4 py-4 text-sm font-semibold text-gray-900">
-                          ₹{averageDeal.toLocaleString("en-IN")}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {source !== "ALL" && (
-            <div className="mt-4 flex items-center justify-between rounded-xl bg-gray-50 px-4 py-3">
-              <p className="text-sm text-gray-600">
-                Showing leads from <span className="font-semibold text-gray-900">{source}</span>
-              </p>
-
-              <button
-                type="button"
-                onClick={() => setSource("ALL")}
-                className="text-sm font-semibold text-gray-700 hover:text-gray-900"
-              >
-                Clear source
-              </button>
+                    <p className="mt-1 text-xs text-gray-500">
+                      leads
+                    </p>
+                  </div>
+                )
+              })}
             </div>
           )}
         </section>

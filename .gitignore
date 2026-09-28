@@ -1,13 +1,28 @@
-# Environment
-.env
-.env.*
-!.env.example
-
 # Python
-.venv/
 __pycache__/
 *.py[cod]
-.pytest_cache/
+*.pyo
+*.pyd
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Environment variables
+.env
+.env.*
+
+# Frontend
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Database / local files
+*.db
+*.sqlite
+*.sqlite3
 
 # IDE
 .vscode/
@@ -16,9 +31,3 @@ __pycache__/
 # OS
 .DS_Store
 Thumbs.db
-
-.env
-__pycache__/
-*.pyc
-
-frontend/dist/

@@ -26,6 +26,9 @@ import {
   generateLeadMessage,
   getWhatsAppUrl,
   createLeadActivity,
+  runLeadAutomation,
+  generateAIFollowUp,
+  getAutomationLogs,
 } from "../services/api"
 
 
@@ -224,6 +227,18 @@ function LeadDetails() {
 
   const [messageError, setMessageError] =
     useState("")
+
+  // =========================================================
+  // SALES AUTOMATION STATE
+  // =========================================================
+
+  const [automationLogs, setAutomationLogs] = useState([])
+  const [automationLoading, setAutomationLoading] = useState(false)
+  const [automationError, setAutomationError] = useState("")
+  const [automationSuccess, setAutomationSuccess] = useState("")
+  const [aiFollowUpMessage, setAiFollowUpMessage] = useState("")
+  const [aiFollowUpReason, setAiFollowUpReason] = useState("")
+  const [aiFollowUpChannel, setAiFollowUpChannel] = useState("")
 
 
   // =========================================================
@@ -1036,6 +1051,253 @@ function LeadDetails() {
 
 
   // =========================================================
+  // AI SALES ACTIONS
+  // =========================================================
+
+  const getLocalDateTimeInput = (hoursFromNow = 1) => {
+    const date = new Date()
+    date.setHours(date.getHours() + hoursFromNow)
+
+    const pad = (value) => String(value).padStart(2, "0")
+
+    return `${date.getFullYear()}-${pad(
+      date.getMonth() + 1
+    )}-${pad(date.getDate())}T${pad(
+      date.getHours()
+    )}:${pad(date.getMinutes())}`
+  }
+
+
+  const handleAIScheduleFollowUp = async () => {
+    if (!lead?.id) return
+
+    try {
+      setFollowUpLoading(true)
+      setFollowUpError("")
+      setFollowUpSuccess("")
+
+      const scheduledAt = getLocalDateTimeInput(1)
+
+      const action =
+        nextAction?.action ||
+        copilot?.sales_strategy ||
+        "Follow up with lead"
+
+      const reason =
+        nextAction?.reason ||
+        copilot?.summary ||
+        "AI recommended follow-up"
+
+      await createManualFollowUp(
+        lead.id,
+        nextAction?.channel === "PHONE" ? "CALL" : "WHATSAPP",
+        scheduledAt,
+        action,
+        reason
+      )
+
+      await createLeadActivity(
+        lead.id,
+        "AI_FOLLOW_UP_CREATED",
+        `AI recommended follow-up created: ${action}`
+      )
+
+      const [
+        updatedFollowUps,
+        updatedActivities,
+        updatedNextAction,
+      ] = await Promise.all([
+        getLeadFollowUps(lead.id),
+        getLeadActivities(lead.id),
+        getLeadNextAction(lead.id),
+      ])
+
+      setFollowUps(updatedFollowUps)
+      setActivities(updatedActivities)
+      setNextAction(updatedNextAction)
+
+      setFollowUpSuccess(
+        "AI follow-up scheduled successfully for 1 hour from now."
+      )
+
+      setTimeout(() => {
+        setFollowUpSuccess("")
+      }, 3500)
+    } catch (error) {
+      console.error(
+        "Failed to schedule AI follow-up:",
+        error
+      )
+
+      setFollowUpError(
+        error.response?.data?.detail ||
+          "Failed to schedule AI follow-up."
+      )
+    } finally {
+      setFollowUpLoading(false)
+    }
+  }
+
+
+  const handleAICall = async () => {
+    if (!lead?.phone) {
+      setFollowUpError("This lead does not have a phone number.")
+      return
+    }
+
+    const cleanPhone = String(lead.phone).replace(/\D/g, "")
+
+    if (!cleanPhone) {
+      setFollowUpError("This lead does not have a valid phone number.")
+      return
+    }
+
+    try {
+      window.location.href = `tel:${cleanPhone}`
+
+      await createLeadActivity(
+        lead.id,
+        "AI_CALL_INITIATED",
+        "Call initiated from the AI recommended sales action."
+      )
+
+      const updatedActivities = await getLeadActivities(lead.id)
+      setActivities(updatedActivities)
+    } catch (error) {
+      console.error(
+        "Failed to record AI call activity:",
+        error
+      )
+    }
+  }
+
+
+  const handleAIWhatsApp = async () => {
+    if (!lead?.phone) {
+      setFollowUpError("This lead does not have a phone number.")
+      return
+    }
+
+    const message =
+      copilot?.whatsapp_message ||
+      generatedMessage?.message ||
+      ""
+
+    await openWhatsApp(message)
+  }
+
+  // =========================================================
+  // SALES AUTOMATION
+  // =========================================================
+
+  const loadAutomationLogs = async () => {
+    if (!lead?.id) return
+
+    try {
+      const data = await getAutomationLogs(lead.id)
+      setAutomationLogs(Array.isArray(data) ? data : [])
+    } catch (error) {
+      console.error("Failed to load automation logs:", error)
+    }
+  }
+
+
+  const handleRunAutomation = async (eventType = "LEAD_CREATED") => {
+    if (!lead?.id) return
+
+    try {
+      setAutomationLoading(true)
+      setAutomationError("")
+      setAutomationSuccess("")
+
+      const result = await runLeadAutomation(
+        lead.id,
+        eventType
+      )
+
+      const logs = await getAutomationLogs(lead.id)
+      setAutomationLogs(Array.isArray(logs) ? logs : [])
+
+      const actionsExecuted = Number(
+        result?.actions_executed || 0
+      )
+
+      setAutomationSuccess(
+        actionsExecuted > 0
+          ? `${actionsExecuted} automation action${actionsExecuted === 1 ? "" : "s"} executed successfully.`
+          : "Automation checked the active rules. No matching action was required."
+      )
+
+      const [updatedFollowUps, updatedActivities] = await Promise.all([
+        getLeadFollowUps(lead.id),
+        getLeadActivities(lead.id),
+      ])
+
+      setFollowUps(updatedFollowUps)
+      setActivities(updatedActivities)
+
+      setTimeout(() => {
+        setAutomationSuccess("")
+      }, 4000)
+    } catch (error) {
+      console.error("Failed to run lead automation:", error)
+
+      setAutomationError(
+        error.response?.data?.detail ||
+          "Failed to run sales automation."
+      )
+    } finally {
+      setAutomationLoading(false)
+    }
+  }
+
+
+  const handleGenerateAutomatedAIFollowUp = async () => {
+    if (!lead?.id) return
+
+    try {
+      setAutomationLoading(true)
+      setAutomationError("")
+      setAutomationSuccess("")
+      setAiFollowUpMessage("")
+      setAiFollowUpReason("")
+      setAiFollowUpChannel("")
+
+      const result = await generateAIFollowUp(lead.id)
+
+      setAiFollowUpMessage(result?.message || "")
+      setAiFollowUpReason(result?.reason || "")
+      setAiFollowUpChannel(
+        result?.recommended_channel || "WHATSAPP"
+      )
+
+      const logs = await getAutomationLogs(lead.id)
+      setAutomationLogs(Array.isArray(logs) ? logs : [])
+
+      setAutomationSuccess(
+        "AI follow-up message generated successfully."
+      )
+
+      setTimeout(() => {
+        setAutomationSuccess("")
+      }, 3500)
+    } catch (error) {
+      console.error(
+        "Failed to generate automated AI follow-up:",
+        error
+      )
+
+      setAutomationError(
+        error.response?.data?.detail ||
+          "Failed to generate AI follow-up."
+      )
+    } finally {
+      setAutomationLoading(false)
+    }
+  }
+
+
+  // =========================================================
   // LOAD LEAD DETAILS
   // =========================================================
 
@@ -1058,6 +1320,20 @@ function LeadDetails() {
         setActivities(activitiesData)
         setFollowUps(followUpsData)
         setNextAction(nextActionData)
+
+        try {
+          const automationData = await getAutomationLogs(id)
+          setAutomationLogs(
+            Array.isArray(automationData)
+              ? automationData
+              : []
+          )
+        } catch (automationError) {
+          console.error(
+            "Failed to load automation logs:",
+            automationError
+          )
+        }
       } catch (error) {
         console.error(
           "Failed to load lead details:",
@@ -2102,6 +2378,85 @@ function LeadDetails() {
                 </div>
 
 
+                {/* AI RECOMMENDED ACTION */}
+                <div className="rounded-2xl border border-violet-200 bg-violet-50 p-5">
+
+                  <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-wide text-violet-500">
+                        AI Recommended Action
+                      </p>
+
+                      <h3 className="mt-1 text-lg font-bold text-violet-950">
+                        {nextAction?.action ||
+                          copilot.sales_strategy ||
+                          "Contact and qualify this lead"}
+                      </h3>
+                    </div>
+
+                    <span
+                      className={`w-fit rounded-full px-3 py-1 text-xs font-bold ${
+                        String(copilot.priority || "NORMAL").toUpperCase() === "HIGH"
+                          ? "bg-red-100 text-red-700"
+                          : String(copilot.priority || "NORMAL").toUpperCase() === "MEDIUM"
+                            ? "bg-orange-100 text-orange-700"
+                            : "bg-slate-100 text-slate-700"
+                      }`}
+                    >
+                      {copilot.priority || "NORMAL"}
+                    </span>
+
+                  </div>
+
+                  {(nextAction?.reason || copilot.summary) && (
+                    <p className="mb-4 text-sm leading-6 text-violet-900">
+                      {nextAction?.reason || copilot.summary}
+                    </p>
+                  )}
+
+                  <div className="flex flex-wrap gap-3">
+
+                    <button
+                      type="button"
+                      onClick={handleAICall}
+                      disabled={!lead.phone}
+                      className="flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      📞 Call Lead
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleAIWhatsApp}
+                      disabled={!lead.phone}
+                      className="flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <MessageCircle size={16} />
+                      WhatsApp
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleAIScheduleFollowUp}
+                      disabled={followUpLoading}
+                      className="flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {followUpLoading ? (
+                        <>
+                          <RefreshCw size={16} className="animate-spin" />
+                          Scheduling...
+                        </>
+                      ) : (
+                        <>📅 Schedule Follow-up</>
+                      )}
+                    </button>
+
+                  </div>
+
+                </div>
+
+
                 <div>
 
                   <div className="mb-3 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
@@ -2851,6 +3206,264 @@ function LeadDetails() {
           </div>
 
         </div>
+
+
+        {/* ================================================= */}
+        {/* SALES AUTOMATION */}
+        {/* ================================================= */}
+
+        <section className="overflow-hidden rounded-2xl border border-violet-200 bg-white shadow-sm">
+
+          <div className="bg-gradient-to-r from-violet-700 to-indigo-700 px-6 py-5 text-white">
+
+            <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+
+              <div className="flex items-center gap-3">
+
+                <div className="rounded-xl bg-white/15 p-2.5">
+                  <Sparkles size={22} />
+                </div>
+
+                <div>
+                  <h2 className="text-lg font-semibold">
+                    Sales Automation
+                  </h2>
+
+                  <p className="text-sm text-violet-100">
+                    Automatically create sales actions, notifications and AI follow-up messages.
+                  </p>
+                </div>
+
+              </div>
+
+              <button
+                type="button"
+                onClick={() => handleRunAutomation("LEAD_CREATED")}
+                disabled={automationLoading}
+                className="flex items-center justify-center gap-2 rounded-lg bg-white/15 px-4 py-2.5 text-sm font-semibold transition hover:bg-white/25 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <RefreshCw
+                  size={16}
+                  className={automationLoading ? "animate-spin" : ""}
+                />
+                {automationLoading ? "Running..." : "Run Automation"}
+              </button>
+
+            </div>
+
+          </div>
+
+          <div className="p-6">
+
+            {automationError && (
+              <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+                <p className="text-sm font-medium text-red-700">
+                  {automationError}
+                </p>
+              </div>
+            )}
+
+            {automationSuccess && (
+              <div className="mb-4 rounded-xl border border-green-200 bg-green-50 px-4 py-3">
+                <p className="text-sm font-medium text-green-700">
+                  {automationSuccess}
+                </p>
+              </div>
+            )}
+
+            <div className="grid gap-4 lg:grid-cols-3">
+
+              <div className="rounded-xl border border-violet-100 bg-violet-50 p-5">
+                <p className="text-xs font-bold uppercase tracking-wide text-violet-500">
+                  Lead Status
+                </p>
+                <p className="mt-2 text-lg font-bold text-violet-950">
+                  {formatPipelineStage(lead.status)}
+                </p>
+                <p className="mt-1 text-sm text-violet-800">
+                  Temperature: {lead.temperature || "Not set"}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-blue-100 bg-blue-50 p-5">
+                <p className="text-xs font-bold uppercase tracking-wide text-blue-500">
+                  Automation Events
+                </p>
+                <p className="mt-2 text-lg font-bold text-blue-950">
+                  {automationLogs.length}
+                </p>
+                <p className="mt-1 text-sm text-blue-800">
+                  Recorded automation events for this lead
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-5">
+                <p className="text-xs font-bold uppercase tracking-wide text-emerald-500">
+                  Latest Automation
+                </p>
+                <p className="mt-2 text-sm font-bold text-emerald-950">
+                  {automationLogs[0]?.action_type || "No automation yet"}
+                </p>
+                <p className="mt-1 text-xs text-emerald-800">
+                  {automationLogs[0]?.created_at
+                    ? formatActivityDate(automationLogs[0].created_at)
+                    : "Run automation to start"}
+                </p>
+              </div>
+
+            </div>
+
+            <div className="mt-5 flex flex-wrap gap-3">
+
+              <button
+                type="button"
+                onClick={() => handleRunAutomation("LEAD_CREATED")}
+                disabled={automationLoading}
+                className="rounded-lg border border-violet-200 bg-violet-50 px-4 py-2.5 text-sm font-semibold text-violet-700 transition hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Run Lead-Created Rules
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleRunAutomation("STATUS_CHANGED")}
+                disabled={automationLoading}
+                className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Run Status Rules
+              </button>
+
+              <button
+                type="button"
+                onClick={handleGenerateAutomatedAIFollowUp}
+                disabled={automationLoading}
+                className="flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Sparkles size={16} />
+                Generate AI Follow-up
+              </button>
+
+            </div>
+
+            {aiFollowUpMessage && (
+              <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+
+                <div className="mb-3 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wide text-emerald-600">
+                      Automated AI Follow-up
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Recommended channel: {aiFollowUpChannel || "WHATSAPP"}
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => openWhatsApp(aiFollowUpMessage)}
+                    disabled={!lead.phone}
+                    className="flex items-center justify-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <MessageCircle size={16} />
+                    Open WhatsApp
+                  </button>
+                </div>
+
+                <div className="rounded-xl border border-emerald-100 bg-white p-4">
+                  <p className="whitespace-pre-line text-sm leading-7 text-slate-700">
+                    {aiFollowUpMessage}
+                  </p>
+                </div>
+
+                {aiFollowUpReason && (
+                  <p className="mt-3 text-xs leading-5 text-emerald-800">
+                    {aiFollowUpReason}
+                  </p>
+                )}
+
+              </div>
+            )}
+
+            <div className="mt-6">
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-900">
+                    Automation Timeline
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Actions executed by the automation engine.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={loadAutomationLogs}
+                  className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
+                >
+                  Refresh
+                </button>
+              </div>
+
+              {automationLogs.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-300 p-6 text-center">
+                  <p className="text-sm font-medium text-slate-600">
+                    No automation activity yet.
+                  </p>
+                  <p className="mt-1 text-xs text-slate-400">
+                    Run an automation rule for this lead to see the history here.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {automationLogs.map((log) => (
+                    <div
+                      key={log.id}
+                      className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                    >
+                      <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-start">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-semibold text-slate-900">
+                              {log.action_type || "Automation Action"}
+                            </span>
+                            <span className="rounded-full bg-blue-100 px-2 py-1 text-[10px] font-bold text-blue-700">
+                              {log.event_type || "EVENT"}
+                            </span>
+                            <span
+                              className={`rounded-full px-2 py-1 text-[10px] font-bold ${
+                                String(log.status || "").toUpperCase() === "SUCCESS"
+                                  ? "bg-green-100 text-green-700"
+                                  : String(log.status || "").toUpperCase() === "FAILED"
+                                    ? "bg-red-100 text-red-700"
+                                    : "bg-slate-200 text-slate-600"
+                              }`}
+                            >
+                              {log.status || "UNKNOWN"}
+                            </span>
+                          </div>
+
+                          {log.message && (
+                            <p className="mt-2 text-sm leading-6 text-slate-600">
+                              {log.message}
+                            </p>
+                          )}
+                        </div>
+
+                        <span className="shrink-0 text-xs text-slate-400">
+                          {log.created_at
+                            ? formatActivityDate(log.created_at)
+                            : ""}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+          </div>
+
+        </section>
 
 
         {/* ================================================= */}

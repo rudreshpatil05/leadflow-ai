@@ -1,12 +1,18 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
+
+from backend.app.db.database import engine
+
 from backend.app.api.v1.dashboard import router as dashboard_router
 from backend.app.api.v1.activities import router as activities_router
 from backend.app.api.v1.leads import router as leads_router
-from backend.app.db.database import engine
-from fastapi.middleware.cors import CORSMiddleware
 from backend.app.api.v1.follow_ups import router as follow_ups_router
 from backend.app.api.v1.next_actions import router as next_actions_router
+from backend.app.api.v1.production import router as production_router
+from backend.app.api.v1.automation import router as automation_v1_router
+from backend.app.routers.sales_assistant import router as sales_assistant_router
+from backend.app.routers.automation import router as automation_router
 
 
 app = FastAPI(
@@ -14,15 +20,12 @@ app = FastAPI(
     description="AI-powered sales automation and lead intelligence platform",
     version="0.1.0",
 )
-app.include_router(
-    follow_ups_router,
-    prefix="/api/v1",
-)
 
-app.include_router(
-    next_actions_router,
-    prefix="/api/v1",
-)
+
+# =========================================================
+# CORS
+# =========================================================
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -35,8 +38,16 @@ app.add_middleware(
 )
 
 app.include_router(
+    automation_v1_router,
+    prefix="/api/v1",
+)
+# =========================================================
+# API ROUTERS
+# =========================================================
+
+app.include_router(
     dashboard_router,
-    prefix="/api/v1"
+    prefix="/api/v1",
 )
 
 app.include_router(
@@ -49,6 +60,35 @@ app.include_router(
     prefix="/api/v1",
 )
 
+app.include_router(
+    follow_ups_router,
+    prefix="/api/v1",
+)
+
+app.include_router(
+    next_actions_router,
+    prefix="/api/v1",
+)
+
+app.include_router(
+    sales_assistant_router,
+    prefix="/api/v1",
+)
+
+app.include_router(
+    automation_router,
+    prefix="/api/v1",
+)
+
+app.include_router(
+    production_router,
+    prefix="/api/v1",
+)
+
+
+# =========================================================
+# HEALTH CHECK
+# =========================================================
 
 @app.get("/health")
 def health_check():
@@ -58,6 +98,10 @@ def health_check():
         "version": "0.1.0",
     }
 
+
+# =========================================================
+# DATABASE HEALTH
+# =========================================================
 
 @app.get("/health/database")
 def database_health():
