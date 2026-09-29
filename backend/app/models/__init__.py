@@ -13,3 +13,5 @@ from backend.app.models.notification import Notification
 
 from backend.app.models.automation_rule import AutomationRule
 from backend.app.models.automation_log import AutomationLog
+
+from backend.app.models.user import User
