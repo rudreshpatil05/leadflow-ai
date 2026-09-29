@@ -10,7 +10,6 @@ from backend.app.models.notification import Notification
 
 
 class AutomationService:
-
     def __init__(self, db: Session):
         self.db = db
 
@@ -20,7 +19,7 @@ class AutomationService:
         rule_id: int | None,
         event_type: str,
         action_type: str,
-        status: str = "SUCCESS",
+        status: str,
         message: str | None = None,
     ):
         log_entry = AutomationLog(
@@ -44,12 +43,14 @@ class AutomationService:
         title: str,
         message: str,
         notification_type: str = "AUTOMATION",
+        priority: str = "MEDIUM",
     ):
         notification = Notification(
             lead_id=lead.id,
+            notification_type=notification_type,
+            priority=priority,
             title=title,
             message=message,
-            notification_type=notification_type,
             is_read=False,
         )
 
@@ -62,18 +63,20 @@ class AutomationService:
     def create_follow_up(
         self,
         lead: Lead,
-        channel: str = "WHATSAPP",
+        follow_up_type: str = "AUTOMATIC",
         delay_hours: int = 24,
-        notes: str | None = None,
+        action: str = "PHONE",
+        reason: str | None = None,
     ):
         scheduled_at = datetime.utcnow() + timedelta(hours=delay_hours)
 
         follow_up = FollowUp(
             lead_id=lead.id,
+            follow_up_type=follow_up_type,
             scheduled_at=scheduled_at,
-            channel=channel,
             status="PENDING",
-            notes=notes,
+            action=action,
+            reason=reason,
         )
 
         self.db.add(follow_up)
@@ -82,12 +85,7 @@ class AutomationService:
 
         return follow_up
 
-    def execute_rule(
-        self,
-        rule: AutomationRule,
-        lead: Lead,
-        event_type: str,
-    ):
+    def execute_rule(self, rule, lead, event_type):
         action_type = str(rule.action_type or "").upper()
 
         if action_type == "PRIORITY_ALERT":
@@ -99,32 +97,34 @@ class AutomationService:
                     "Immediate follow-up is recommended."
                 ),
                 notification_type="PRIORITY",
+                priority="HIGH",
             )
 
             return "Priority alert notification created"
 
         if action_type == "CREATE_FOLLOW_UP":
-            channel = "WHATSAPP"
+            action = "PHONE"
 
             action_value = str(rule.action_value or "").upper()
 
-            if "PHONE" in action_value:
-                channel = "PHONE"
-            elif "CALL" in action_value:
-                channel = "PHONE"
+            if "WHATSAPP" in action_value:
+                action = "WHATSAPP"
             elif "EMAIL" in action_value:
-                channel = "EMAIL"
+                action = "EMAIL"
+            elif "PHONE" in action_value or "CALL" in action_value:
+                action = "PHONE"
+
+            delay_hours = 24
 
             self.create_follow_up(
                 lead=lead,
-                channel=channel,
-                delay_hours=24,
-                notes=(
-                    f"Automatically created by rule: {rule.name}"
-                ),
+                follow_up_type="AUTOMATIC",
+                delay_hours=delay_hours,
+                action=action,
+                reason=f"Automatically created by rule: {rule.name}",
             )
 
-            return f"Automatic {channel} follow-up created"
+            return f"Automatic {action} follow-up created"
 
         if action_type == "CREATE_NOTIFICATION":
             self.create_notification(
@@ -132,22 +132,18 @@ class AutomationService:
                 title=rule.name,
                 message=(
                     rule.description
-                    or f"Automation rule triggered for {lead.name or lead.phone}"
+                    or f"Automation rule triggered for "
+                    f"{lead.name or lead.phone}"
                 ),
                 notification_type="AUTOMATION",
+                priority="MEDIUM",
             )
 
             return "Automation notification created"
 
         return f"Unsupported automation action: {action_type}"
 
-    def evaluate_rule(
-        self,
-        rule: AutomationRule,
-        lead: Lead,
-        event_type: str,
-    ) -> bool:
-
+    def evaluate_rule(self, rule, lead, event_type):
         if not rule.is_active:
             return False
 
@@ -170,11 +166,7 @@ class AutomationService:
 
         return False
 
-    def process_event(
-        self,
-        lead: Lead,
-        event_type: str = "LEAD_CREATED",
-    ):
+    def process_event(self, lead, event_type="LEAD_CREATED"):
         rules = (
             self.db.query(AutomationRule)
             .filter(
@@ -189,7 +181,6 @@ class AutomationService:
         skipped = []
 
         for rule in rules:
-
             if not self.evaluate_rule(
                 rule=rule,
                 lead=lead,

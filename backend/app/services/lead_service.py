@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from backend.app.models.lead import Lead
 from backend.app.models.lead_activity import LeadActivity
 from backend.app.schemas.lead import LeadCreate, LeadUpdate
+from backend.app.services.lead_event_service import LeadEventService
 
 
 PIPELINE_STAGES = {
@@ -20,20 +21,35 @@ PIPELINE_STAGES = {
 }
 
 
-def create_lead(
-    db: Session,
-    lead_data: LeadCreate,
-) -> Lead:
+def create_lead(db: Session, lead_data: LeadCreate) -> Lead:
     lead = Lead(
         name=lead_data.name,
         phone=lead_data.phone,
         email=lead_data.email,
         source=lead_data.source,
+        status=lead_data.status or "new",
+        temperature=lead_data.temperature,
+        score=lead_data.score or 0,
+        notes=lead_data.notes,
     )
 
     db.add(lead)
     db.commit()
     db.refresh(lead)
+
+    event_service = LeadEventService(db)
+    event_service.lead_created(lead)
+
+    return lead
+    # =========================================================
+    # AUTOMATION EVENT
+    # =========================================================
+
+    # Trigger automation only after the lead has been
+    # successfully committed to the database.
+    event_service = LeadEventService(db)
+
+    event_service.lead_created(lead)
 
     return lead
 
@@ -113,6 +129,10 @@ def update_lead(
 
     if lead is None:
         return None
+
+    # =========================================================
+    # CAPTURE OLD STATUS
+    # =========================================================
 
     old_status = (
         str(lead.status or "NEW")
@@ -280,8 +300,26 @@ def update_lead(
 
         db.add(activity)
 
+    # =========================================================
+    # SAVE LEAD UPDATE
+    # =========================================================
+
     db.commit()
     db.refresh(lead)
+
+    # =========================================================
+    # AUTOMATION EVENT
+    # =========================================================
+
+    if status_changed:
+
+        event_service = LeadEventService(db)
+
+        event_service.status_changed(
+            lead=lead,
+            old_status=old_status,
+            new_status=new_status,
+        )
 
     return lead
 
@@ -298,8 +336,11 @@ def delete_lead(
     if lead is None:
         return False
 
+    # =========================================================
+    # DELETE LEAD
+    # =========================================================
+
     db.delete(lead)
     db.commit()
 
     return True
-

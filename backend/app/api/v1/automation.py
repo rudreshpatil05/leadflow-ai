@@ -1,13 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from backend.app.db.database import get_db
-from backend.app.models.lead import Lead
+from backend.app.db.database import Base, engine, get_db
 from backend.app.models.automation_rule import AutomationRule
 from backend.app.models.automation_log import AutomationLog
-from backend.app.services.automation_service import AutomationService
 from backend.app.services.automation_rules import initialize_default_rules
-
+from backend.app.services.ai_followup_service import AIFollowUpService
+from backend.app.models.lead import Lead
+from backend.app.models.follow_up import FollowUp
+from backend.app.models.notification import Notification
 
 router = APIRouter(
     prefix="/automation",
@@ -16,41 +17,101 @@ router = APIRouter(
 
 
 @router.post("/initialize")
-def initialize_automation(
-    db: Session = Depends(get_db),
-):
-    rules = initialize_default_rules(db)
+def initialize_automation(db: Session = Depends(get_db)):
+    try:
+        Base.metadata.create_all(
+            bind=engine,
+            tables=[
+                AutomationRule.__table__,
+                AutomationLog.__table__,
+                FollowUp.__table__,
+                Notification.__table__,
+            ],
+        )
 
-    return {
-        "success": True,
-        "created_rules": len(rules),
-    }
+        rules = initialize_default_rules(db)
+
+        return {
+            "success": True,
+            "message": "Automation system initialized successfully.",
+            "rules_created": len(rules),
+            "rules": [
+                {
+                    "id": rule.id,
+                    "name": rule.name,
+                    "event_type": rule.event_type,
+                    "condition_type": rule.condition_type,
+                    "condition_value": rule.condition_value,
+                    "action_type": rule.action_type,
+                    "action_value": rule.action_value,
+                    "is_active": rule.is_active,
+                }
+                for rule in rules
+            ],
+        }
+
+    except Exception as exc:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Automation initialization failed: {str(exc)}",
+        )
+    """
+    Create Phase 7 automation tables and initialize
+    the default automation rules.
+    """
+
+    try:
+        # Create only the Phase 7 automation tables.
+        Base.metadata.create_all(
+            bind=engine,
+            tables=[
+                AutomationRule.__table__,
+                AutomationLog.__table__,
+            ],
+        )
+
+        # Now that the table exists, initialize default rules.
+        rules = initialize_default_rules(db)
+
+        return {
+            "success": True,
+            "message": "Automation system initialized successfully.",
+            "rules_created": len(rules),
+            "rules": [
+                {
+                    "id": rule.id,
+                    "name": rule.name,
+                    "event_type": rule.event_type,
+                    "condition_type": rule.condition_type,
+                    "condition_value": rule.condition_value,
+                    "action_type": rule.action_type,
+                    "action_value": rule.action_value,
+                    "is_active": rule.is_active,
+                }
+                for rule in rules
+            ],
+        }
+
+    except Exception as exc:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Automation initialization failed: {str(exc)}",
+        )
 
 
 @router.get("/rules")
 def get_automation_rules(
     db: Session = Depends(get_db),
 ):
-    rules = (
+    return (
         db.query(AutomationRule)
-        .order_by(AutomationRule.created_at.desc())
+        .order_by(AutomationRule.id.asc())
         .all()
     )
-
-    return [
-        {
-            "id": rule.id,
-            "name": rule.name,
-            "description": rule.description,
-            "event_type": rule.event_type,
-            "condition_type": rule.condition_type,
-            "condition_value": rule.condition_value,
-            "action_type": rule.action_type,
-            "action_value": rule.action_value,
-            "is_active": rule.is_active,
-        }
-        for rule in rules
-    ]
 
 
 @router.patch("/rules/{rule_id}")
@@ -68,7 +129,7 @@ def update_automation_rule(
     if not rule:
         raise HTTPException(
             status_code=404,
-            detail="Automation rule not found",
+            detail="Automation rule not found.",
         )
 
     rule.is_active = is_active
@@ -76,11 +137,7 @@ def update_automation_rule(
     db.commit()
     db.refresh(rule)
 
-    return {
-        "success": True,
-        "rule_id": rule.id,
-        "is_active": rule.is_active,
-    }
+    return rule
 
 
 @router.post("/leads/{lead_id}/run")
@@ -98,8 +155,10 @@ def run_lead_automation(
     if not lead:
         raise HTTPException(
             status_code=404,
-            detail="Lead not found",
+            detail="Lead not found.",
         )
+
+    from backend.app.services.automation_service import AutomationService
 
     service = AutomationService(db)
 
@@ -114,30 +173,49 @@ def get_automation_logs(
     lead_id: int | None = None,
     db: Session = Depends(get_db),
 ):
-    query = db.query(AutomationLog)
+    query = (
+        db.query(AutomationLog)
+        .order_by(AutomationLog.created_at.desc())
+    )
 
     if lead_id:
         query = query.filter(
             AutomationLog.lead_id == lead_id
         )
 
-    logs = (
-        query
-        .order_by(AutomationLog.created_at.desc())
-        .limit(100)
-        .all()
+    return query.all()
+
+
+@router.post("/leads/{lead_id}/ai-follow-up")
+def generate_ai_follow_up(
+    lead_id: int,
+    db: Session = Depends(get_db),
+):
+    lead = (
+        db.query(Lead)
+        .filter(Lead.id == lead_id)
+        .first()
     )
 
-    return [
-        {
-            "id": log.id,
-            "lead_id": log.lead_id,
-            "rule_id": log.rule_id,
-            "event_type": log.event_type,
-            "action_type": log.action_type,
-            "status": log.status,
-            "message": log.message,
-            "created_at": log.created_at,
+    if not lead:
+        raise HTTPException(
+            status_code=404,
+            detail="Lead not found.",
+        )
+
+    try:
+        service = AIFollowUpService()
+
+        result = service.generate_message(lead)
+
+        return {
+            "success": True,
+            "lead_id": lead.id,
+            "result": result,
         }
-        for log in logs
-    ]
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"AI follow-up generation failed: {str(exc)}",
+        )
