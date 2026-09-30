@@ -15,11 +15,17 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from backend.app.core.auth import (
+    require_admin,
+    require_manager,
+    require_sales,
+)
 from backend.app.db.database import get_db
 from backend.app.models.lead import Lead
 from backend.app.models.follow_up import FollowUp
 from backend.app.models.audit_log import AuditLog
 from backend.app.models.notification import Notification
+from backend.app.models.user import User
 
 
 router = APIRouter(
@@ -123,10 +129,14 @@ def lead_to_export_row(lead):
 
 # =========================================================
 # HEALTH
+# ALL AUTHENTICATED USERS
 # =========================================================
 
 @router.get("/health")
-def production_health(db: Session = Depends(get_db)):
+def production_health(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_sales),
+):
     try:
         db.execute(text("SELECT 1"))
 
@@ -149,11 +159,13 @@ def production_health(db: Session = Depends(get_db)):
 
 # =========================================================
 # CREATE PHASE 6 TABLES
+# ADMIN ONLY
 # =========================================================
 
 @router.post("/initialize")
 def initialize_production_tables(
     db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
 ):
     """
     Creates Phase 6 tables if they do not already exist.
@@ -181,11 +193,13 @@ def initialize_production_tables(
 
 # =========================================================
 # CSV EXPORT
+# MANAGER / ADMIN
 # =========================================================
 
 @router.get("/leads/export")
 def export_leads(
     db: Session = Depends(get_db),
+    _: User = Depends(require_manager),
 ):
     leads = (
         db.query(Lead)
@@ -256,12 +270,14 @@ def export_leads(
 
 # =========================================================
 # CSV IMPORT
+# ADMIN ONLY
 # =========================================================
 
 @router.post("/leads/import")
 async def import_leads(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
 ):
     if not file.filename:
         raise HTTPException(
@@ -343,12 +359,14 @@ async def import_leads(
 
             if not phone:
                 skipped += 1
+
                 errors.append(
                     {
                         "row": row_number,
                         "error": "Phone is required.",
                     }
                 )
+
                 continue
 
             if phone in existing_phones:
@@ -441,6 +459,7 @@ async def import_leads(
 
 # =========================================================
 # BULK UPDATE
+# MANAGER / ADMIN
 # =========================================================
 
 class BulkLeadUpdateRequest(BaseModel):
@@ -454,6 +473,7 @@ class BulkLeadUpdateRequest(BaseModel):
 def bulk_update_leads(
     payload: BulkLeadUpdateRequest,
     db: Session = Depends(get_db),
+    _: User = Depends(require_manager),
 ):
     if not payload.lead_ids:
         raise HTTPException(
@@ -463,7 +483,9 @@ def bulk_update_leads(
 
     leads = (
         db.query(Lead)
-        .filter(Lead.id.in_(payload.lead_ids))
+        .filter(
+            Lead.id.in_(payload.lead_ids)
+        )
         .all()
     )
 
@@ -511,11 +533,13 @@ def bulk_update_leads(
 
 # =========================================================
 # DUPLICATE DETECTION
+# MANAGER / ADMIN
 # =========================================================
 
 @router.get("/leads/duplicates")
 def detect_duplicates(
     db: Session = Depends(get_db),
+    _: User = Depends(require_manager),
 ):
     leads = (
         db.query(Lead)
@@ -587,6 +611,7 @@ def detect_duplicates(
 
 # =========================================================
 # AUDIT LOG
+# MANAGER / ADMIN
 # =========================================================
 
 @router.get("/audit-logs")
@@ -600,6 +625,7 @@ def get_audit_logs(
         le=500,
     ),
     db: Session = Depends(get_db),
+    _: User = Depends(require_manager),
 ):
     query = (
         db.query(AuditLog)
@@ -631,6 +657,7 @@ def get_audit_logs(
 
 # =========================================================
 # NOTIFICATIONS
+# ALL AUTHENTICATED USERS
 # =========================================================
 
 @router.get("/notifications")
@@ -642,6 +669,7 @@ def get_notifications(
         le=200,
     ),
     db: Session = Depends(get_db),
+    _: User = Depends(require_sales),
 ):
     query = (
         db.query(Notification)
@@ -687,12 +715,16 @@ def get_notifications(
 
 # =========================================================
 # MARK NOTIFICATION READ
+# ALL AUTHENTICATED USERS
 # =========================================================
 
-@router.patch("/notifications/{notification_id}/read")
+@router.patch(
+    "/notifications/{notification_id}/read"
+)
 def mark_notification_read(
     notification_id: int,
     db: Session = Depends(get_db),
+    _: User = Depends(require_sales),
 ):
     notification = (
         db.query(Notification)
@@ -722,11 +754,13 @@ def mark_notification_read(
 
 # =========================================================
 # GENERATE SALES NOTIFICATIONS
+# MANAGER / ADMIN
 # =========================================================
 
 @router.post("/notifications/generate")
 def generate_notifications(
     db: Session = Depends(get_db),
+    _: User = Depends(require_manager),
 ):
     created = []
 
@@ -878,11 +912,13 @@ def generate_notifications(
 
 # =========================================================
 # TEAM PERFORMANCE
+# MANAGER / ADMIN
 # =========================================================
 
 @router.get("/team-performance")
 def team_performance(
     db: Session = Depends(get_db),
+    _: User = Depends(require_manager),
 ):
     """
     Uses lead.source as the salesperson/owner
@@ -929,17 +965,17 @@ def team_performance(
 
         item["total_leads"] += 1
 
-        status = normalize_status(
+        lead_status = normalize_status(
             lead.status
         )
 
-        if status == "CONVERTED":
+        if lead_status == "CONVERTED":
             item["converted_leads"] += 1
             item["revenue"] += float(
                 lead.deal_value or 0
             )
 
-        elif status == "LOST":
+        elif lead_status == "LOST":
             item["lost_leads"] += 1
 
         else:
@@ -985,6 +1021,7 @@ def team_performance(
 
 # =========================================================
 # REVENUE SUMMARY BY DATE
+# MANAGER / ADMIN
 # =========================================================
 
 @router.get("/revenue-summary")
@@ -992,6 +1029,7 @@ def revenue_summary(
     from_date: date = Query(...),
     to_date: date = Query(...),
     db: Session = Depends(get_db),
+    _: User = Depends(require_manager),
 ):
     if from_date > to_date:
         raise HTTPException(
@@ -1050,11 +1088,13 @@ def revenue_summary(
 
 # =========================================================
 # CRM SUMMARY
+# MANAGER / ADMIN
 # =========================================================
 
 @router.get("/crm-summary")
 def crm_summary(
     db: Session = Depends(get_db),
+    _: User = Depends(require_manager),
 ):
     leads = (
         db.query(Lead)
@@ -1107,3 +1147,27 @@ def crm_summary(
             2,
         ),
     }
+
+@router.get("/audit-logs")
+def get_audit_logs(
+    limit: int = 200,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_manager),
+):
+    logs = (
+        db.query(AuditLog)
+        .order_by(AuditLog.created_at.desc())
+        .limit(min(limit, 500))
+        .all()
+    )
+
+    return [
+        {
+            "id": log.id,
+            "lead_id": log.lead_id,
+            "action": log.action,
+            "description": log.description,
+            "created_at": log.created_at,
+        }
+        for log in logs
+    ]

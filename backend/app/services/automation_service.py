@@ -181,6 +181,18 @@ class AutomationService:
         skipped = []
 
         for rule in rules:
+
+            if self.already_executed(
+                lead_id=lead.id,
+                rule_id=rule.id,
+                event_type=event_type,
+            ):
+                skipped.append({
+                    "rule_id": rule.id,
+                    "rule_name": rule.name,
+                    "reason": "Already executed for this lead and event.",
+                })
+                continue
             if not self.evaluate_rule(
                 rule=rule,
                 lead=lead,
@@ -250,3 +262,22 @@ class AutomationService:
             "executed": executed,
             "skipped": skipped,
         }
+    def already_executed(
+            self,
+            lead_id,
+            rule_id,
+            event_type,
+        ):
+            existing = (
+                self.db.query(AutomationLog)
+                .filter(
+                    AutomationLog.lead_id == lead_id,
+                    AutomationLog.rule_id == rule_id,
+                    AutomationLog.event_type == event_type,
+                    AutomationLog.status == "SUCCESS",
+                )
+                .first()
+            )
+
+            return existing is not None
+    

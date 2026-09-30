@@ -2,15 +2,24 @@ from math import ceil
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
-from backend.app.services.message_generator_service import generate_lead_message
+
+from backend.app.core.auth import (
+    get_current_user,
+    require_manager,
+    require_sales,
+)
 from backend.app.db.database import get_db
 from backend.app.models.lead import Lead
+from backend.app.models.user import User
 from backend.app.schemas.lead import (
     LeadCreate,
     LeadResponse,
     LeadUpdate,
 )
 from backend.app.schemas.qualification import LeadQualificationRequest
+from backend.app.services.lead_qualification_service import (
+    qualify_and_save_lead,
+)
 from backend.app.services.lead_service import (
     create_lead,
     delete_lead,
@@ -18,10 +27,12 @@ from backend.app.services.lead_service import (
     get_leads,
     update_lead,
 )
-from backend.app.services.lead_qualification_service import (
-    qualify_and_save_lead,
+from backend.app.services.message_generator_service import (
+    generate_lead_message,
 )
-from backend.app.services.sales_copilot_service import generate_sales_copilot
+from backend.app.services.sales_copilot_service import (
+    generate_sales_copilot,
+)
 
 
 router = APIRouter(
@@ -32,6 +43,7 @@ router = APIRouter(
 
 # =========================================================
 # CREATE LEAD
+# SALES / MANAGER / ADMIN
 # =========================================================
 
 @router.post(
@@ -42,6 +54,7 @@ router = APIRouter(
 def create_new_lead(
     lead_data: LeadCreate,
     db: Session = Depends(get_db),
+    _: User = Depends(require_sales),
 ):
     return create_lead(
         db=db,
@@ -51,6 +64,7 @@ def create_new_lead(
 
 # =========================================================
 # GET ALL LEADS
+# SALES / MANAGER / ADMIN
 # =========================================================
 
 @router.get("/")
@@ -62,6 +76,7 @@ def list_leads(
     temperature: str | None = Query(None),
     status: str | None = Query(None),
     source: str | None = Query(None),
+    _: User = Depends(require_sales),
 ):
     leads, total = get_leads(
         db=db,
@@ -86,6 +101,7 @@ def list_leads(
 
 # =========================================================
 # GET SINGLE LEAD
+# SALES / MANAGER / ADMIN
 # =========================================================
 
 @router.get(
@@ -95,6 +111,7 @@ def list_leads(
 def get_single_lead(
     lead_id: int,
     db: Session = Depends(get_db),
+    _: User = Depends(require_sales),
 ):
     lead = get_lead(
         db=db,
@@ -112,6 +129,7 @@ def get_single_lead(
 
 # =========================================================
 # QUALIFY LEAD
+# SALES / MANAGER / ADMIN
 # =========================================================
 
 @router.post(
@@ -121,6 +139,7 @@ def qualify_lead(
     lead_id: int,
     request: LeadQualificationRequest,
     db: Session = Depends(get_db),
+    _: User = Depends(require_sales),
 ):
     lead = get_lead(
         db=db,
@@ -142,6 +161,7 @@ def qualify_lead(
 
 # =========================================================
 # UPDATE LEAD
+# SALES / MANAGER / ADMIN
 # =========================================================
 
 @router.patch(
@@ -152,6 +172,7 @@ def update_existing_lead(
     lead_id: int,
     lead_data: LeadUpdate,
     db: Session = Depends(get_db),
+    _: User = Depends(require_sales),
 ):
     lead = update_lead(
         db=db,
@@ -170,6 +191,7 @@ def update_existing_lead(
 
 # =========================================================
 # DELETE LEAD
+# MANAGER / ADMIN ONLY
 # =========================================================
 
 @router.delete(
@@ -179,6 +201,7 @@ def update_existing_lead(
 def delete_existing_lead(
     lead_id: int,
     db: Session = Depends(get_db),
+    _: User = Depends(require_manager),
 ):
     deleted = delete_lead(
         db=db,
@@ -193,27 +216,56 @@ def delete_existing_lead(
 
     return None
 
+
+# =========================================================
+# SALES COPILOT
+# SALES / MANAGER / ADMIN
+# =========================================================
+
 @router.get("/{lead_id}/sales-copilot")
 def get_sales_copilot(
     lead_id: int,
     db: Session = Depends(get_db),
+    _: User = Depends(require_sales),
 ):
-    lead = get_lead(db=db, lead_id=lead_id)
+    lead = get_lead(
+        db=db,
+        lead_id=lead_id,
+    )
 
     if lead is None:
         raise HTTPException(
             status_code=404,
-            detail="Lead not found"
+            detail="Lead not found",
         )
-# ---------------------------------------------------------
+
+    try:
+        return generate_sales_copilot(lead)
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        )
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Sales copilot failed: {str(exc)}",
+        )
+
+
+# =========================================================
 # AI MESSAGE GENERATOR
-# ---------------------------------------------------------
+# SALES / MANAGER / ADMIN
+# =========================================================
 
 @router.post("/{lead_id}/generate-message")
 def generate_message_for_lead(
     lead_id: int,
     message_type: str,
     db: Session = Depends(get_db),
+    _: User = Depends(require_sales),
 ):
     lead = get_lead(
         db=db,
@@ -243,4 +295,3 @@ def generate_message_for_lead(
             status_code=500,
             detail=f"Message generation failed: {str(exc)}",
         )
-    return generate_sales_copilot(lead)

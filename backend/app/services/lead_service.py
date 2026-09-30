@@ -7,6 +7,7 @@ from backend.app.models.lead import Lead
 from backend.app.models.lead_activity import LeadActivity
 from backend.app.schemas.lead import LeadCreate, LeadUpdate
 from backend.app.services.lead_event_service import LeadEventService
+from backend.app.services.audit_service import AuditService
 
 
 PIPELINE_STAGES = {
@@ -21,7 +22,10 @@ PIPELINE_STAGES = {
 }
 
 
-def create_lead(db: Session, lead_data: LeadCreate) -> Lead:
+def create_lead(
+    db: Session,
+    lead_data: LeadCreate,
+) -> Lead:
     lead = Lead(
         name=lead_data.name,
         phone=lead_data.phone,
@@ -37,16 +41,21 @@ def create_lead(db: Session, lead_data: LeadCreate) -> Lead:
     db.commit()
     db.refresh(lead)
 
-    event_service = LeadEventService(db)
-    event_service.lead_created(lead)
+    # =========================================================
+    # AUDIT LOG
+    # =========================================================
 
-    return lead
+    AuditService.log(
+        db=db,
+        action="CREATE_LEAD",
+        lead_id=lead.id,
+        description=f"Lead created: {lead.name or lead.phone}",
+    )
+
     # =========================================================
     # AUTOMATION EVENT
     # =========================================================
 
-    # Trigger automation only after the lead has been
-    # successfully committed to the database.
     event_service = LeadEventService(db)
 
     event_service.lead_created(lead)
@@ -308,6 +317,20 @@ def update_lead(
     db.refresh(lead)
 
     # =========================================================
+    # AUDIT LOG
+    # =========================================================
+
+    if status_changed:
+
+        AuditService.log(
+            db=db,
+            action="STATUS_CHANGE",
+            lead_id=lead.id,
+            description=f"Lead status changed from {old_status} to {new_status}",
+        )
+        
+
+    # =========================================================
     # AUTOMATION EVENT
     # =========================================================
 
@@ -335,6 +358,18 @@ def delete_lead(
 
     if lead is None:
         return False
+
+    # =========================================================
+    # AUDIT LOG BEFORE DELETE
+    # =========================================================
+
+    AuditService.log(
+        db=db,
+        action="DELETE_LEAD",
+        lead_id=lead.id,
+        description=f"Lead deleted: {lead.name or lead.phone}",
+    
+    )
 
     # =========================================================
     # DELETE LEAD
