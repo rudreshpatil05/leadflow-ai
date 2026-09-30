@@ -31,3 +31,7 @@ frontend/.vite/
 # OS
 .DS_Store
 Thumbs.db
+# Python generated files
+__pycache__/
+*.pyc
+
