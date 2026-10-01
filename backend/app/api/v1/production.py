@@ -26,6 +26,9 @@ from backend.app.models.follow_up import FollowUp
 from backend.app.models.audit_log import AuditLog
 from backend.app.models.notification import Notification
 from backend.app.models.user import User
+class LeadAssignmentRequest(BaseModel):
+    assigned_to: int
+
 
 
 router = APIRouter(
@@ -86,6 +89,7 @@ def lead_to_export_row(lead):
         "status": lead.status or "",
         "temperature": lead.temperature or "",
         "score": lead.score or 0,
+        "assigned_to": lead.assigned_to or "",
         "notes": lead.notes or "",
         "property_type": lead.property_type or "",
         "configuration": lead.configuration or "",
@@ -218,6 +222,7 @@ def export_leads(
         "status",
         "temperature",
         "score",
+        "assigned_to",
         "notes",
         "property_type",
         "configuration",
@@ -383,6 +388,11 @@ async def import_leads(
                 ) or "NEW",
                 temperature=normalize_temperature(
                     row.get("temperature")
+                ),
+                assigned_to=(
+                    int(row.get("assigned_to"))
+                    if str(row.get("assigned_to") or "").strip().isdigit()
+                    else None
                 ),
                 score=int(
                     safe_float(
@@ -911,6 +921,115 @@ def generate_notifications(
 
 
 # =========================================================
+# SALES USERS / LEAD ASSIGNMENT
+# =========================================================
+
+@router.get("/users/sales")
+def get_sales_users(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_sales),
+):
+    users = (
+        db.query(User)
+        .filter(User.is_active.is_(True), User.role.in_(["SALES", "MANAGER", "ADMIN"]))
+        .order_by(User.name.asc())
+        .all()
+    )
+    return {"users": [{
+        "id": user.id, "name": user.name, "email": user.email,
+        "role": user.role, "is_active": user.is_active,
+    } for user in users]}
+
+
+@router.patch("/leads/{lead_id}/assign")
+def assign_lead(
+    lead_id: int,
+    payload: LeadAssignmentRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_manager),
+):
+    lead = db.query(Lead).filter(Lead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+
+    assigned_user = (
+        db.query(User)
+        .filter(User.id == payload.assigned_to, User.is_active.is_(True), User.role.in_(["SALES", "MANAGER", "ADMIN"]))
+        .first()
+    )
+    if not assigned_user:
+        raise HTTPException(status_code=404, detail="Assigned user not found or inactive")
+
+    previous_assigned_to = lead.assigned_to
+    if previous_assigned_to == assigned_user.id:
+        return {
+            "message": "Lead is already assigned to this user",
+            "lead_id": lead.id,
+            "assigned_to": assigned_user.id,
+            "assigned_user": {"id": assigned_user.id, "name": assigned_user.name, "email": assigned_user.email, "role": assigned_user.role},
+        }
+
+    previous_user = db.query(User).filter(User.id == previous_assigned_to).first() if previous_assigned_to is not None else None
+    previous_name = previous_user.name if previous_user else "Unassigned"
+    lead.assigned_to = assigned_user.id
+    db.add(AuditLog(
+        lead_id=lead.id,
+        action="ASSIGN_LEAD",
+        description=f"Lead #{lead.id} assignment changed from {previous_name} to {assigned_user.name} by {current_user.name}",
+    ))
+    try:
+        db.commit()
+        db.refresh(lead)
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to assign lead")
+
+    return {
+        "message": "Lead assigned successfully",
+        "lead_id": lead.id,
+        "assigned_to": assigned_user.id,
+        "assigned_user": {"id": assigned_user.id, "name": assigned_user.name, "email": assigned_user.email, "role": assigned_user.role},
+        "previous_assigned_to": previous_assigned_to,
+    }
+
+
+@router.patch("/leads/{lead_id}/unassign")
+def unassign_lead(
+    lead_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_manager),
+):
+    lead = db.query(Lead).filter(Lead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    if lead.assigned_to is None:
+        return {"message": "Lead is already unassigned", "lead_id": lead.id, "assigned_to": None}
+
+    previous_assigned_to = lead.assigned_to
+    previous_user = db.query(User).filter(User.id == previous_assigned_to).first()
+    previous_name = previous_user.name if previous_user else f"User #{previous_assigned_to}"
+    lead.assigned_to = None
+    db.add(AuditLog(
+        lead_id=lead.id,
+        action="UNASSIGN_LEAD",
+        description=f"Lead #{lead.id} was unassigned from {previous_name} by {current_user.name}",
+    ))
+    try:
+        db.commit()
+        db.refresh(lead)
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to unassign lead")
+
+    return {
+        "message": "Lead unassigned successfully",
+        "lead_id": lead.id,
+        "previous_assigned_to": previous_assigned_to,
+        "assigned_to": None,
+    }
+
+
+# =========================================================
 # TEAM PERFORMANCE
 # MANAGER / ADMIN
 # =========================================================
@@ -920,103 +1039,55 @@ def team_performance(
     db: Session = Depends(get_db),
     _: User = Depends(require_manager),
 ):
-    """
-    Uses lead.source as the salesperson/owner
-    when an explicit owner system is not yet present.
-
-    You can replace this later with assigned_to.
-    """
-
-    leads = (
-        db.query(Lead)
-        .order_by(Lead.created_at.desc())
-        .all()
-    )
+    """Return team performance grouped by actual lead ownership."""
+    leads = db.query(Lead).order_by(Lead.created_at.desc()).all()
+    user_ids = {lead.assigned_to for lead in leads if lead.assigned_to is not None}
+    users = {
+        user.id: user
+        for user in db.query(User).filter(User.id.in_(user_ids)).all()
+    } if user_ids else {}
 
     grouped = {}
-
     for lead in leads:
+        owner_id = lead.assigned_to
+        if owner_id is None:
+            key = "UNASSIGNED"
+            salesperson = "UNASSIGNED"
+        else:
+            user = users.get(owner_id)
+            key = str(owner_id)
+            salesperson = user.name if user else f"User #{owner_id}"
 
-        owner = (
-            getattr(
-                lead,
-                "assigned_to",
-                None,
-            )
-            or "UNASSIGNED"
-        )
-
-        owner = str(owner).strip()
-
-        if not owner:
-            owner = "UNASSIGNED"
-
-        if owner not in grouped:
-            grouped[owner] = {
-                "salesperson": owner,
-                "total_leads": 0,
-                "active_leads": 0,
-                "converted_leads": 0,
-                "lost_leads": 0,
-                "revenue": 0.0,
-            }
-
-        item = grouped[owner]
-
+        grouped.setdefault(key, {
+            "user_id": owner_id,
+            "salesperson": salesperson,
+            "total_leads": 0,
+            "active_leads": 0,
+            "converted_leads": 0,
+            "lost_leads": 0,
+            "revenue": 0.0,
+        })
+        item = grouped[key]
         item["total_leads"] += 1
-
-        lead_status = normalize_status(
-            lead.status
-        )
-
-        if lead_status == "CONVERTED":
+        status = normalize_status(lead.status)
+        if status == "CONVERTED":
             item["converted_leads"] += 1
-            item["revenue"] += float(
-                lead.deal_value or 0
-            )
-
-        elif lead_status == "LOST":
+            item["revenue"] += float(lead.deal_value or 0)
+        elif status == "LOST":
             item["lost_leads"] += 1
-
         else:
             item["active_leads"] += 1
 
     for item in grouped.values():
-
         total = item["total_leads"]
-
         item["conversion_rate"] = round(
-            (
-                item["converted_leads"]
-                / total
-                * 100
-            )
-            if total
-            else 0,
-            2,
+            item["converted_leads"] / total * 100 if total else 0, 2
         )
+        item["revenue"] = round(item["revenue"], 2)
 
-        item["revenue"] = round(
-            item["revenue"],
-            2,
-        )
-
-    result = list(
-        grouped.values()
-    )
-
-    result.sort(
-        key=lambda item: (
-            item["revenue"],
-            item["converted_leads"],
-            item["total_leads"],
-        ),
-        reverse=True,
-    )
-
-    return {
-        "team": result,
-    }
+    result = list(grouped.values())
+    result.sort(key=lambda x: (x["revenue"], x["converted_leads"], x["total_leads"]), reverse=True)
+    return {"team": result}
 
 
 # =========================================================
@@ -1147,27 +1218,3 @@ def crm_summary(
             2,
         ),
     }
-
-@router.get("/audit-logs")
-def get_audit_logs(
-    limit: int = 200,
-    db: Session = Depends(get_db),
-    _: User = Depends(require_manager),
-):
-    logs = (
-        db.query(AuditLog)
-        .order_by(AuditLog.created_at.desc())
-        .limit(min(limit, 500))
-        .all()
-    )
-
-    return [
-        {
-            "id": log.id,
-            "lead_id": log.lead_id,
-            "action": log.action,
-            "description": log.description,
-            "created_at": log.created_at,
-        }
-        for log in logs
-    ]

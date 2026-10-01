@@ -44,6 +44,7 @@ class LeadResponse(BaseModel):
     status: str
     temperature: str | None
     score: int
+    assigned_to: int | None
     notes: str | None
 
     # AI extracted requirements
