@@ -82,8 +82,13 @@ def get_leads(
     temperature: str | None = None,
     status: str | None = None,
     source: str | None = None,
+    assigned_to: str | None = None,
 ):
     query = db.query(Lead)
+
+    # =========================================================
+    # SEARCH FILTER
+    # =========================================================
 
     if search:
         search_term = f"%{search}%"
@@ -98,22 +103,82 @@ def get_leads(
             )
         )
 
+    # =========================================================
+    # TEMPERATURE FILTER
+    # =========================================================
+
     if temperature:
         query = query.filter(
             Lead.temperature == temperature
         )
+
+    # =========================================================
+    # STATUS FILTER
+    # =========================================================
 
     if status:
         query = query.filter(
             Lead.status == status
         )
 
+    # =========================================================
+    # SOURCE FILTER
+    # =========================================================
+
     if source:
         query = query.filter(
             Lead.source == source
         )
 
+    # =========================================================
+    # LEAD OWNERSHIP FILTER
+    # =========================================================
+    #
+    # Supported values:
+    #
+    # assigned_to=1
+    # assigned_to=unassigned
+    # assigned_to=all
+    #
+    # =========================================================
+
+    if assigned_to is not None:
+
+        owner_filter = assigned_to.strip().lower()
+
+        # No ownership filtering
+        if owner_filter in {"", "all"}:
+            pass
+
+        # Show only unassigned leads
+        elif owner_filter == "unassigned":
+            query = query.filter(
+                Lead.assigned_to.is_(None)
+            )
+
+        # Show leads assigned to a specific user
+        else:
+            try:
+                owner_id = int(owner_filter)
+            except ValueError:
+                raise ValueError(
+                    "assigned_to must be a user ID, "
+                    "'unassigned', or 'all'."
+                )
+
+            query = query.filter(
+                Lead.assigned_to == owner_id
+            )
+
+    # =========================================================
+    # TOTAL
+    # =========================================================
+
     total = query.count()
+
+    # =========================================================
+    # PAGINATION
+    # =========================================================
 
     leads = (
         query
@@ -326,9 +391,11 @@ def update_lead(
             db=db,
             action="STATUS_CHANGE",
             lead_id=lead.id,
-            description=f"Lead status changed from {old_status} to {new_status}",
+            description=(
+                f"Lead status changed from "
+                f"{old_status} to {new_status}"
+            ),
         )
-        
 
     # =========================================================
     # AUTOMATION EVENT
@@ -368,7 +435,6 @@ def delete_lead(
         action="DELETE_LEAD",
         lead_id=lead.id,
         description=f"Lead deleted: {lead.name or lead.phone}",
-    
     )
 
     # =========================================================
