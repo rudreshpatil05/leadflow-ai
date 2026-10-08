@@ -5,9 +5,9 @@ const API = axios.create({
 })
 
 
-// ===============================
+// ============================================================
 // DASHBOARD
-// ===============================
+// ============================================================
 
 export const getDashboardStats = async () => {
   const response = await API.get("/dashboard/stats")
@@ -25,12 +25,48 @@ export const getDashboardFollowUps = async () => {
 }
 
 
-// ===============================
+// ============================================================
 // LEADS
-// ===============================
+// ============================================================
 
-export const getLeads = async () => {
-  const response = await API.get("/leads/")
+export const getLeads = async (options = {}) => {
+  const params = {}
+
+  if (
+    options.assignedTo !== undefined &&
+    options.assignedTo !== null &&
+    options.assignedTo !== ""
+  ) {
+    params.assigned_to = options.assignedTo
+  }
+
+  if (options.page !== undefined) {
+    params.page = options.page
+  }
+
+  if (options.pageSize !== undefined) {
+    params.page_size = options.pageSize
+  }
+
+  if (options.search) {
+    params.search = options.search
+  }
+
+  if (options.temperature) {
+    params.temperature = options.temperature
+  }
+
+  if (options.status) {
+    params.status = options.status
+  }
+
+  if (options.source) {
+    params.source = options.source
+  }
+
+  const response = await API.get("/leads/", {
+    params,
+  })
 
   if (Array.isArray(response.data)) {
     return response.data
@@ -39,15 +75,18 @@ export const getLeads = async () => {
   return response.data.items || []
 }
 
+
 export const getLead = async (leadId) => {
   const response = await API.get(`/leads/${leadId}`)
   return response.data
 }
 
+
 export const createLead = async (leadData) => {
   const response = await API.post("/leads/", leadData)
   return response.data
 }
+
 
 export const updateLead = async (leadId, leadData) => {
   const response = await API.patch(
@@ -57,6 +96,7 @@ export const updateLead = async (leadId, leadData) => {
 
   return response.data
 }
+
 
 export const qualifyLead = async (leadId, message) => {
   const response = await API.post(
@@ -70,9 +110,23 @@ export const qualifyLead = async (leadId, message) => {
 }
 
 
-// ===============================
+// ============================================================
+// SALES USERS / LEAD OWNERS
+// PHASE 9.4
+// ============================================================
+
+export const getSalesUsers = async () => {
+  const response = await API.get(
+    "/production/users/sales"
+  )
+
+  return response.data
+}
+
+
+// ============================================================
 // ACTIVITIES
-// ===============================
+// ============================================================
 
 export const createLeadActivity = async (
   leadId,
@@ -88,6 +142,7 @@ export const createLeadActivity = async (
   return response.data
 }
 
+
 export const getLeadActivities = async (leadId) => {
   const response = await API.get(
     `/activities/lead/${leadId}`
@@ -97,9 +152,9 @@ export const getLeadActivities = async (leadId) => {
 }
 
 
-// ===============================
+// ============================================================
 // FOLLOW UPS
-// ===============================
+// ============================================================
 
 export const getLeadFollowUps = async (leadId) => {
   const response = await API.get(
@@ -109,6 +164,7 @@ export const getLeadFollowUps = async (leadId) => {
   return response.data
 }
 
+
 export const completeFollowUp = async (followUpId) => {
   const response = await API.patch(
     `/follow-ups/${followUpId}/complete`
@@ -116,6 +172,7 @@ export const completeFollowUp = async (followUpId) => {
 
   return response.data
 }
+
 
 export const createManualFollowUp = async (
   leadId,
@@ -133,42 +190,14 @@ export const createManualFollowUp = async (
       reason,
     }
   )
-const handleAIWhatsApp = async () => {
-  if (!lead?.phone) return
 
-  const message =
-    copilot?.whatsapp_message ||
-    generatedMessage?.message ||
-    ""
-
-  openWhatsApp(message)
-
-  try {
-    await createLeadActivity(
-      lead.id,
-      "AI_WHATSAPP_SENT",
-      "AI-generated WhatsApp message opened for lead communication."
-    )
-
-    const updatedActivities =
-      await getLeadActivities(lead.id)
-
-    setActivities(updatedActivities)
-
-  } catch (error) {
-    console.error(
-      "Failed to record AI WhatsApp activity:",
-      error
-    )
-  }
-}
   return response.data
 }
 
 
-// ===============================
+// ============================================================
 // NEXT BEST ACTION
-// ===============================
+// ============================================================
 
 export const getLeadNextAction = async (leadId) => {
   const response = await API.get(
@@ -179,9 +208,9 @@ export const getLeadNextAction = async (leadId) => {
 }
 
 
-// ===============================
+// ============================================================
 // AI SALES ASSISTANT / COPILOT
-// ===============================
+// ============================================================
 
 export const getSalesCopilot = async (leadId) => {
   const response = await API.get(
@@ -192,9 +221,9 @@ export const getSalesCopilot = async (leadId) => {
 }
 
 
-// ===============================
+// ============================================================
 // AI MESSAGE GENERATOR
-// ===============================
+// ============================================================
 
 export const generateLeadMessage = async (
   leadId,
@@ -214,9 +243,9 @@ export const generateLeadMessage = async (
 }
 
 
-// ===============================
+// ============================================================
 // WHATSAPP
-// ===============================
+// ============================================================
 
 export const getWhatsAppUrl = (
   phone,
@@ -380,41 +409,15 @@ export const getLeadFilterOptions = async () => {
 
   return response.data
 }
-const handleAICall = async () => {
-  if (!lead?.phone) return
 
-  const cleanPhone = String(
-    lead.phone
-  ).replace(/\D/g, "")
 
-  window.location.href = `tel:${cleanPhone}`
-
-  try {
-    await createLeadActivity(
-      lead.id,
-      "AI_CALL_INITIATED",
-      "Call initiated from AI recommended sales action."
-    )
-
-    const updatedActivities =
-      await getLeadActivities(lead.id)
-
-    setActivities(updatedActivities)
-
-  } catch (error) {
-    console.error(
-      "Failed to record AI call activity:",
-      error
-    )
-  }
-}
 // ============================================================
 // AUTOMATION
 // ============================================================
 
-export const runLeadAutomation = async (leadId) => {
+export const initializeAutomation = async () => {
   const response = await API.post(
-    `/automation/lead/${leadId}/run`
+    "/automation/initialize"
   )
 
   return response.data
@@ -428,28 +431,13 @@ export const getAutomationRules = async () => {
 
   return response.data
 }
-export const getAutomationStats = async () => {
-  const response = await API.get(
-    "/automation/stats"
-  )
 
-  return response.data
-}
-// ============================================================
-// DEFAULT API
-// ============================================================
-export const initializeAutomation = async () => {
-  const response = await api.post("/automation/initialize");
-  return response.data;
-};
 
-export const getAutomationRules = async () => {
-  const response = await api.get("/automation/rules");
-  return response.data;
-};
-
-export const updateAutomationRule = async (ruleId, isActive) => {
-  const response = await api.patch(
+export const updateAutomationRule = async (
+  ruleId,
+  isActive
+) => {
+  const response = await API.patch(
     `/automation/rules/${ruleId}`,
     null,
     {
@@ -457,16 +445,17 @@ export const updateAutomationRule = async (ruleId, isActive) => {
         is_active: isActive,
       },
     }
-  );
+  )
 
-  return response.data;
-};
+  return response.data
+}
+
 
 export const runLeadAutomation = async (
   leadId,
   eventType = "LEAD_CREATED"
 ) => {
-  const response = await api.post(
+  const response = await API.post(
     `/automation/leads/${leadId}/run`,
     null,
     {
@@ -474,31 +463,52 @@ export const runLeadAutomation = async (
         event_type: eventType,
       },
     }
-  );
+  )
 
-  return response.data;
-};
+  return response.data
+}
 
-export const getAutomationLogs = async (leadId = null) => {
-  const params = {};
 
-  if (leadId) {
-    params.lead_id = leadId;
+export const getAutomationLogs = async (
+  leadId = null
+) => {
+  const params = {}
+
+  if (leadId !== null && leadId !== undefined) {
+    params.lead_id = leadId
   }
 
-  const response = await api.get(
+  const response = await API.get(
     "/automation/logs",
-    { params }
-  );
+    {
+      params,
+    }
+  )
 
-  return response.data;
-};
+  return response.data
+}
+
+
+export const getAutomationStats = async () => {
+  const response = await API.get(
+    "/automation/stats"
+  )
+
+  return response.data
+}
+
 
 export const generateAIFollowUp = async (leadId) => {
-  const response = await api.post(
+  const response = await API.post(
     `/automation/leads/${leadId}/ai-follow-up`
-  );
+  )
 
-  return response.data;
-};
+  return response.data
+}
+
+
+// ============================================================
+// DEFAULT API CLIENT
+// ============================================================
+
 export default API
