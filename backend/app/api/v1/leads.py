@@ -76,6 +76,7 @@ def list_leads(
     temperature: str | None = Query(None),
     status: str | None = Query(None),
     source: str | None = Query(None),
+    assigned_to: str | None = Query(None),
     _: User = Depends(require_sales),
 ):
     leads, total = get_leads(
@@ -86,6 +87,7 @@ def list_leads(
         temperature=temperature,
         status=status,
         source=source,
+        assigned_to=assigned_to,
     )
 
     total_pages = ceil(total / page_size) if total else 0
