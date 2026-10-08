@@ -33,8 +33,8 @@ import {
   getRevenueForecast,
   getSalesProductivity,
   getLeadFilterOptions,
+  getSalesUsers,
 } from "../services/api"
-
 
 const PIPELINE_STAGES = [
   {
@@ -74,13 +74,11 @@ const PIPELINE_STAGES = [
   },
 ]
 
-
 const STATUS_OPTIONS = [
   "ALL",
   ...PIPELINE_STAGES.map((stage) => stage.key),
   "LOST",
 ]
-
 
 function normalizeStatus(status) {
   const value = String(status || "NEW").trim().toUpperCase()
@@ -92,11 +90,9 @@ function normalizeStatus(status) {
   return value
 }
 
-
 function normalizeTemperature(temperature) {
   return String(temperature || "").trim().toUpperCase()
 }
-
 
 function formatStatus(status) {
   const value = normalizeStatus(status)
@@ -108,7 +104,6 @@ function formatStatus(status) {
   return value.replaceAll("_", " ")
 }
 
-
 function formatTemperature(temperature) {
   const value = normalizeTemperature(temperature)
 
@@ -119,7 +114,6 @@ function formatTemperature(temperature) {
   return value
 }
 
-
 function getLeadScore(lead) {
   const score = Number(lead?.score)
 
@@ -129,7 +123,6 @@ function getLeadScore(lead) {
 
   return score
 }
-
 
 function formatDate(value) {
   if (!value) {
@@ -148,7 +141,6 @@ function formatDate(value) {
     year: "numeric",
   })
 }
-
 
 function getFollowUpForLead(lead, followUps) {
   if (!lead || !Array.isArray(followUps)) {
@@ -180,7 +172,6 @@ function getFollowUpForLead(lead, followUps) {
   return pending[0] || matching[0]
 }
 
-
 function getFollowUpTiming(followUp) {
   if (!followUp?.scheduled_at) {
     return null
@@ -196,7 +187,6 @@ function getFollowUpTiming(followUp) {
 
   return scheduled <= now ? "DUE" : "UPCOMING"
 }
-
 
 function TemperatureBadge({ temperature }) {
   const value = normalizeTemperature(temperature)
@@ -235,7 +225,6 @@ function TemperatureBadge({ temperature }) {
   )
 }
 
-
 function PriorityBadge({ score }) {
   const numericScore = getLeadScore({ score })
 
@@ -270,18 +259,21 @@ function PriorityBadge({ score }) {
   )
 }
 
-
 function StatCard({ title, value, icon: Icon, description }) {
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
       <div className="flex items-start justify-between">
         <div>
           <p className="text-sm font-medium text-gray-500">{title}</p>
+
           <p className="mt-2 text-3xl font-bold text-gray-900">
             {value}
           </p>
+
           {description && (
-            <p className="mt-1 text-xs text-gray-500">{description}</p>
+            <p className="mt-1 text-xs text-gray-500">
+              {description}
+            </p>
           )}
         </div>
 
@@ -292,7 +284,6 @@ function StatCard({ title, value, icon: Icon, description }) {
     </div>
   )
 }
-
 
 function InsightCard({ title, value, description }) {
   return (
@@ -313,7 +304,6 @@ function InsightCard({ title, value, description }) {
     </div>
   )
 }
-
 
 function Dashboard() {
   const [stats, setStats] = useState(null)
@@ -340,7 +330,9 @@ function Dashboard() {
     cold: 0,
     total_active: 0,
   })
+
   const [priorityLeads, setPriorityLeads] = useState([])
+
   const [followUpIntelligence, setFollowUpIntelligence] = useState({
     overdue: 0,
     today: 0,
@@ -348,6 +340,7 @@ function Dashboard() {
     completed: 0,
     completion_rate: 0,
   })
+
   const [revenueForecast, setRevenueForecast] = useState({
     converted_revenue: 0,
     pipeline_value: 0,
@@ -358,6 +351,7 @@ function Dashboard() {
       negotiation: 0,
     },
   })
+
   const [salesProductivity, setSalesProductivity] = useState({
     total_leads: 0,
     active_leads: 0,
@@ -365,6 +359,7 @@ function Dashboard() {
     lost_leads: 0,
     conversion_rate: 0,
   })
+
   const [leadFilterOptions, setLeadFilterOptions] = useState({
     statuses: [],
     temperatures: [],
@@ -372,8 +367,13 @@ function Dashboard() {
     locations: [],
   })
 
- 
-  
+  // ============================================================
+  // PHASE 9.4 - MY LEADS
+  // ============================================================
+
+  const [salesUsers, setSalesUsers] = useState([])
+  const [selectedOwner, setSelectedOwner] = useState("all")
+
   const [search, setSearch] = useState("")
   const [temperature, setTemperature] = useState("ALL")
   const [status, setStatus] = useState("ALL")
@@ -395,6 +395,7 @@ function Dashboard() {
       const [
         dashboardStats,
         leadsResponse,
+        salesUsersResponse,
         salesAnalyticsResponse,
         sourceResponse,
         sourcePerformanceResponse,
@@ -410,7 +411,16 @@ function Dashboard() {
         leadFilterOptionsResponse,
       ] = await Promise.all([
         getDashboardStats(),
-        getLeads(),
+
+        getLeads({
+          assignedTo:
+            selectedOwner === "all"
+              ? undefined
+              : selectedOwner,
+        }),
+
+        getSalesUsers(),
+
         getSalesAnalytics(),
         getSourceAnalytics(),
         getSourcePerformance(),
@@ -427,6 +437,13 @@ function Dashboard() {
       ])
 
       setStats(dashboardStats || {})
+
+      setSalesUsers(
+        Array.isArray(salesUsersResponse)
+          ? salesUsersResponse
+          : salesUsersResponse?.items || []
+      )
+
       setSalesAnalytics(salesAnalyticsResponse || {})
 
       if (Array.isArray(leadsResponse)) {
@@ -438,7 +455,7 @@ function Dashboard() {
       } else {
         setLeads([])
       }
-      
+
       if (Array.isArray(sourceResponse)) {
         setSourceAnalytics(sourceResponse)
       } else if (Array.isArray(sourceResponse?.items)) {
@@ -467,6 +484,7 @@ function Dashboard() {
           total_active: 0,
         }
       )
+
       setPriorityLeads(
         Array.isArray(leadIntelligenceResponse?.priority_leads)
           ? leadIntelligenceResponse.priority_leads
@@ -534,12 +552,21 @@ function Dashboard() {
       if (leadAgingResponse?.summary) {
         setLeadAging({
           fresh: Number(leadAgingResponse.summary.fresh || 0),
-          attention: Number(leadAgingResponse.summary.attention || 0),
+          attention: Number(
+            leadAgingResponse.summary.attention || 0
+          ),
           stale: Number(leadAgingResponse.summary.stale || 0),
-          critical: Number(leadAgingResponse.summary.critical || 0),
+          critical: Number(
+            leadAgingResponse.summary.critical || 0
+          ),
         })
       } else {
-        setLeadAging({ fresh: 0, attention: 0, stale: 0, critical: 0 })
+        setLeadAging({
+          fresh: 0,
+          attention: 0,
+          stale: 0,
+          critical: 0,
+        })
       }
 
       setStaleLeads(
@@ -555,6 +582,7 @@ function Dashboard() {
             ? salesAlertsResponse
             : []
       )
+
       setAlertSummary(salesAlertsResponse?.summary || {})
     } catch (error) {
       console.error("Dashboard loading failed:", error)
@@ -565,11 +593,9 @@ function Dashboard() {
     }
   }
 
-
   useEffect(() => {
     loadDashboard()
-  }, [])
-
+  }, [selectedOwner])
 
   const sourceOptions = useMemo(() => {
     const sources = new Set()
@@ -585,6 +611,69 @@ function Dashboard() {
     )
   }, [leads])
 
+  // ============================================================
+  // PHASE 9.4 - OWNER-SPECIFIC LEAD KPIs
+  // ============================================================
+
+  const ownerLeadStats = useMemo(() => {
+    const total = leads.length
+
+    const hot = leads.filter(
+      (lead) =>
+        normalizeTemperature(lead.temperature) === "HOT"
+    ).length
+
+    const warm = leads.filter(
+      (lead) =>
+        normalizeTemperature(lead.temperature) === "WARM"
+    ).length
+
+    const newLeads = leads.filter(
+      (lead) =>
+        normalizeStatus(lead.status) === "NEW"
+    ).length
+
+    const qualified = leads.filter(
+      (lead) =>
+        normalizeStatus(lead.status) === "QUALIFIED"
+    ).length
+
+    const converted = leads.filter(
+      (lead) =>
+        normalizeStatus(lead.status) === "CONVERTED"
+    ).length
+
+    const lost = leads.filter(
+      (lead) =>
+        normalizeStatus(lead.status) === "LOST"
+    ).length
+
+    return {
+      total,
+      hot,
+      warm,
+      newLeads,
+      qualified,
+      converted,
+      lost,
+    }
+  }, [leads])
+
+  const selectedOwnerName = useMemo(() => {
+    if (selectedOwner === "all") {
+      return "All Leads"
+    }
+
+    if (selectedOwner === "unassigned") {
+      return "Unassigned Leads"
+    }
+
+    const owner = salesUsers.find(
+      (user) => String(user.id) === String(selectedOwner)
+    )
+
+    return owner?.name || "Selected Salesperson"
+  }, [selectedOwner, salesUsers])
 
   const pipelineStats = useMemo(() => {
     const counts = {}
@@ -603,7 +692,12 @@ function Dashboard() {
         return
       }
 
-      if (Object.prototype.hasOwnProperty.call(counts, leadStatus)) {
+      if (
+        Object.prototype.hasOwnProperty.call(
+          counts,
+          leadStatus
+        )
+      ) {
         counts[leadStatus] += 1
       } else {
         counts.NEW += 1
@@ -617,14 +711,15 @@ function Dashboard() {
     }
   }, [leads])
 
-
   const salesInsights = useMemo(() => {
     const hotLeads = leads.filter(
-      (lead) => normalizeTemperature(lead.temperature) === "HOT"
+      (lead) =>
+        normalizeTemperature(lead.temperature) === "HOT"
     )
 
     const warmLeads = leads.filter(
-      (lead) => normalizeTemperature(lead.temperature) === "WARM"
+      (lead) =>
+        normalizeTemperature(lead.temperature) === "WARM"
     )
 
     const highIntent = leads.filter((lead) => {
@@ -664,17 +759,23 @@ function Dashboard() {
     }
   }, [leads])
 
-
   const priorityQueue = useMemo(() => {
     const now = new Date()
 
     return [...leads]
       .map((lead) => {
-        const followUp = getFollowUpForLead(lead, followUps)
-        const followUpTiming = getFollowUpTiming(followUp)
+        const followUp = getFollowUpForLead(
+          lead,
+          followUps
+        )
+
+        const followUpTiming =
+          getFollowUpTiming(followUp)
 
         const score = getLeadScore(lead)
-        const temp = normalizeTemperature(lead.temperature)
+        const temp = normalizeTemperature(
+          lead.temperature
+        )
         const leadStatus = normalizeStatus(lead.status)
 
         let priority = score
@@ -709,14 +810,19 @@ function Dashboard() {
           followUp,
           followUpTiming,
           priority,
-          _updatedAt: updatedAt || createdAt || now.getTime(),
+          _updatedAt:
+            updatedAt ||
+            createdAt ||
+            now.getTime(),
         }
       })
       .filter((lead) => {
         const leadStatus = normalizeStatus(lead.status)
 
-        return leadStatus !== "CONVERTED" &&
+        return (
+          leadStatus !== "CONVERTED" &&
           leadStatus !== "LOST"
+        )
       })
       .sort((a, b) => {
         if (b.priority !== a.priority) {
@@ -727,7 +833,6 @@ function Dashboard() {
       })
       .slice(0, 5)
   }, [leads, followUps])
-
 
   const filteredLeads = useMemo(() => {
     let result = [...leads]
@@ -853,7 +958,6 @@ function Dashboard() {
     followUps,
   ])
 
-
   const activeFilterCount = useMemo(() => {
     let count = 0
 
@@ -874,7 +978,6 @@ function Dashboard() {
     followUpFilter,
   ])
 
-
   function clearFilters() {
     setSearch("")
     setTemperature("ALL")
@@ -885,7 +988,6 @@ function Dashboard() {
     setSortBy("NEWEST")
   }
 
-
   function handlePipelineStageClick(stage) {
     if (status === stage) {
       setStatus("ALL")
@@ -894,7 +996,6 @@ function Dashboard() {
 
     setStatus(stage)
   }
-
 
   function handleLostClick() {
     if (status === "LOST") {
@@ -905,24 +1006,20 @@ function Dashboard() {
     setStatus("LOST")
   }
 
-
   const totalLeads =
     stats?.total ??
     stats?.total_leads ??
     leads.length
-
 
   const hotCount =
     stats?.hot ??
     stats?.hot_leads ??
     salesInsights.hot
 
-
   const warmCount =
     stats?.warm ??
     stats?.warm_leads ??
     salesInsights.warm
-
 
   const coldCount =
     stats?.cold ??
@@ -934,12 +1031,16 @@ function Dashboard() {
     ).length
 
   const maxRevenueTrendValue = Math.max(
-    ...revenueTrend.map((item) => Number(item.revenue || 0)),
+    ...revenueTrend.map(
+      (item) => Number(item.revenue || 0)
+    ),
     1
   )
 
   const maxFunnelCount = Math.max(
-    ...conversionFunnel.map((item) => Number(item.count || 0)),
+    ...conversionFunnel.map(
+      (item) => Number(item.count || 0)
+    ),
     1
   )
 
@@ -951,7 +1052,6 @@ function Dashboard() {
 
   const formatCurrency = (value) =>
     `₹${Number(value || 0).toLocaleString("en-IN")}`
-
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -984,7 +1084,6 @@ function Dashboard() {
           </button>
         </div>
 
-
         {/* STATISTICS */}
         <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
@@ -1016,6 +1115,123 @@ function Dashboard() {
           />
         </div>
 
+        {/* ============================================================
+            PHASE 9.4 - MY LEADS / OWNER DASHBOARD
+        ============================================================ */}
+        <section className="mb-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+          <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">
+                My Leads
+              </h2>
+
+              <p className="mt-1 text-sm text-gray-500">
+                View lead ownership and salesperson-specific performance.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <label
+                htmlFor="lead-owner-filter"
+                className="text-sm font-semibold text-gray-600"
+              >
+                Owner
+              </label>
+
+              <select
+                id="lead-owner-filter"
+                value={selectedOwner}
+                onChange={(event) => {
+                  setSelectedOwner(event.target.value)
+                }}
+                className="min-w-[210px] rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-semibold text-gray-700 outline-none transition focus:border-gray-500"
+              >
+                <option value="all">
+                  All Leads
+                </option>
+
+                <option value="unassigned">
+                  Unassigned Leads
+                </option>
+
+                {salesUsers.map((user) => (
+                  <option
+                    key={user.id}
+                    value={user.id}
+                  >
+                    {user.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-gray-900">
+                {selectedOwnerName}
+              </p>
+
+              <p className="text-xs text-gray-500">
+                {ownerLeadStats.total} leads in this view
+              </p>
+            </div>
+
+            {selectedOwner !== "all" && (
+              <button
+                type="button"
+                onClick={() => setSelectedOwner("all")}
+                className="text-sm font-semibold text-gray-600 hover:text-gray-900"
+              >
+                Clear owner
+              </button>
+            )}
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+            <InsightCard
+              title="Total"
+              value={ownerLeadStats.total}
+              description="Leads"
+            />
+
+            <InsightCard
+              title="Hot"
+              value={ownerLeadStats.hot}
+              description="High priority"
+            />
+
+            <InsightCard
+              title="Warm"
+              value={ownerLeadStats.warm}
+              description="Needs nurturing"
+            />
+
+            <InsightCard
+              title="New"
+              value={ownerLeadStats.newLeads}
+              description="New leads"
+            />
+
+            <InsightCard
+              title="Qualified"
+              value={ownerLeadStats.qualified}
+              description="Qualified"
+            />
+
+            <InsightCard
+              title="Converted"
+              value={ownerLeadStats.converted}
+              description="Converted"
+            />
+
+            <InsightCard
+              title="Lost"
+              value={ownerLeadStats.lost}
+              description="Lost leads"
+            />
+          </div>
+        </section>
 
         {/* STEP 30 - PIPELINE & REVENUE BREAKDOWN */}
         <section className="mb-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
@@ -1250,50 +1466,117 @@ function Dashboard() {
           </div>
         </section>
 
-
-        {/* ============================================================
-            STEP 37 - LEAD INTELLIGENCE
-        ============================================================ */}
+        {/* STEP 37 - LEAD INTELLIGENCE */}
         <section className="mb-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
           <div className="mb-4">
-            <h2 className="text-lg font-bold text-gray-900">Lead Intelligence</h2>
-            <p className="mt-1 text-sm text-gray-500">Understand active lead quality and priority opportunities.</p>
+            <h2 className="text-lg font-bold text-gray-900">
+              Lead Intelligence
+            </h2>
+
+            <p className="mt-1 text-sm text-gray-500">
+              Understand active lead quality and priority opportunities.
+            </p>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <InsightCard title="Hot Leads" value={leadIntelligence.hot} description="High-priority active leads" />
-            <InsightCard title="Warm Leads" value={leadIntelligence.warm} description="Leads requiring nurturing" />
-            <InsightCard title="Cold Leads" value={leadIntelligence.cold} description="Lower-priority active leads" />
-            <InsightCard title="Active Leads" value={leadIntelligence.total_active} description="Open opportunities" />
+            <InsightCard
+              title="Hot Leads"
+              value={leadIntelligence.hot}
+              description="High-priority active leads"
+            />
+
+            <InsightCard
+              title="Warm Leads"
+              value={leadIntelligence.warm}
+              description="Leads requiring nurturing"
+            />
+
+            <InsightCard
+              title="Cold Leads"
+              value={leadIntelligence.cold}
+              description="Lower-priority active leads"
+            />
+
+            <InsightCard
+              title="Active Leads"
+              value={leadIntelligence.total_active}
+              description="Open opportunities"
+            />
           </div>
 
           <div className="mt-5">
             <div className="mb-3 flex items-center justify-between">
               <div>
-                <h3 className="text-sm font-bold text-gray-900">Priority Leads</h3>
-                <p className="mt-1 text-xs text-gray-500">Highest-scoring active opportunities.</p>
+                <h3 className="text-sm font-bold text-gray-900">
+                  Priority Leads
+                </h3>
+
+                <p className="mt-1 text-xs text-gray-500">
+                  Highest-scoring active opportunities.
+                </p>
               </div>
-              <span className="text-xs font-semibold text-gray-500">Top {priorityLeads.length}</span>
+
+              <span className="text-xs font-semibold text-gray-500">
+                Top {priorityLeads.length}
+              </span>
             </div>
 
             {priorityLeads.length === 0 ? (
-              <div className="rounded-xl bg-gray-50 p-5 text-center text-sm text-gray-500">No priority leads available.</div>
+              <div className="rounded-xl bg-gray-50 p-5 text-center text-sm text-gray-500">
+                No priority leads available.
+              </div>
             ) : (
               <div className="space-y-2">
                 {priorityLeads.map((lead) => (
-                  <Link key={lead.id} to={`/leads/${lead.id}`} className="block rounded-xl border border-gray-200 p-4 transition hover:border-gray-400 hover:shadow-sm">
+                  <Link
+                    key={lead.id}
+                    to={`/leads/${lead.id}`}
+                    className="block rounded-xl border border-gray-200 p-4 transition hover:border-gray-400 hover:shadow-sm"
+                  >
                     <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-semibold text-gray-900">{lead.name}</span>
-                          <TemperatureBadge temperature={lead.temperature} />
-                          <PriorityBadge score={lead.score} />
+                          <span className="font-semibold text-gray-900">
+                            {lead.name}
+                          </span>
+
+                          <TemperatureBadge
+                            temperature={lead.temperature}
+                          />
+
+                          <PriorityBadge
+                            score={lead.score}
+                          />
                         </div>
-                        <p className="mt-1 text-xs text-gray-500">{lead.phone}{lead.location ? ` · ${lead.location}` : ""}</p>
+
+                        <p className="mt-1 text-xs text-gray-500">
+                          {lead.phone}
+                          {lead.location
+                            ? ` · ${lead.location}`
+                            : ""}
+                        </p>
                       </div>
+
                       <div className="flex items-center gap-5 text-right">
-                        <div><p className="text-xs text-gray-500">Score</p><p className="font-bold text-gray-900">{lead.score}</p></div>
-                        <div><p className="text-xs text-gray-500">Budget</p><p className="font-semibold text-gray-900">{formatCurrency(lead.budget_max)}</p></div>
+                        <div>
+                          <p className="text-xs text-gray-500">
+                            Score
+                          </p>
+
+                          <p className="font-bold text-gray-900">
+                            {lead.score}
+                          </p>
+                        </div>
+
+                        <div>
+                          <p className="text-xs text-gray-500">
+                            Budget
+                          </p>
+
+                          <p className="font-semibold text-gray-900">
+                            {formatCurrency(lead.budget_max)}
+                          </p>
+                        </div>
                       </div>
                     </div>
                   </Link>
@@ -1306,69 +1589,219 @@ function Dashboard() {
         {/* STEP 38 - FOLLOW-UP INTELLIGENCE */}
         <section className="mb-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
           <div className="mb-4">
-            <h2 className="text-lg font-bold text-gray-900">Follow-up Intelligence</h2>
-            <p className="mt-1 text-sm text-gray-500">Monitor overdue, current and upcoming sales follow-ups.</p>
+            <h2 className="text-lg font-bold text-gray-900">
+              Follow-up Intelligence
+            </h2>
+
+            <p className="mt-1 text-sm text-gray-500">
+              Monitor overdue, current and upcoming sales follow-ups.
+            </p>
           </div>
+
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-            <InsightCard title="Overdue" value={followUpIntelligence.overdue} description="Needs immediate action" />
-            <InsightCard title="Today" value={followUpIntelligence.today} description="Scheduled today" />
-            <InsightCard title="Upcoming" value={followUpIntelligence.upcoming} description="Future follow-ups" />
-            <InsightCard title="Completed" value={followUpIntelligence.completed} description="Completed follow-ups" />
-            <InsightCard title="Completion Rate" value={`${followUpIntelligence.completion_rate}%`} description="Follow-up completion" />
+            <InsightCard
+              title="Overdue"
+              value={followUpIntelligence.overdue}
+              description="Needs immediate action"
+            />
+
+            <InsightCard
+              title="Today"
+              value={followUpIntelligence.today}
+              description="Scheduled today"
+            />
+
+            <InsightCard
+              title="Upcoming"
+              value={followUpIntelligence.upcoming}
+              description="Future follow-ups"
+            />
+
+            <InsightCard
+              title="Completed"
+              value={followUpIntelligence.completed}
+              description="Completed follow-ups"
+            />
+
+            <InsightCard
+              title="Completion Rate"
+              value={`${followUpIntelligence.completion_rate}%`}
+              description="Follow-up completion"
+            />
           </div>
         </section>
 
         {/* STEP 39 - REVENUE FORECAST */}
         <section className="mb-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
           <div className="mb-4">
-            <h2 className="text-lg font-bold text-gray-900">Revenue Forecast</h2>
-            <p className="mt-1 text-sm text-gray-500">Current revenue and probability-weighted active pipeline.</p>
+            <h2 className="text-lg font-bold text-gray-900">
+              Revenue Forecast
+            </h2>
+
+            <p className="mt-1 text-sm text-gray-500">
+              Current revenue and probability-weighted active pipeline.
+            </p>
           </div>
+
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <InsightCard title="Converted Revenue" value={formatCurrency(revenueForecast.converted_revenue)} description="Recorded closed-deal revenue" />
-            <InsightCard title="Active Pipeline" value={formatCurrency(revenueForecast.pipeline_value)} description="Potential active pipeline" />
-            <InsightCard title="Weighted Forecast" value={formatCurrency(revenueForecast.forecast_value)} description="Probability-weighted pipeline" />
+            <InsightCard
+              title="Converted Revenue"
+              value={formatCurrency(
+                revenueForecast.converted_revenue
+              )}
+              description="Recorded closed-deal revenue"
+            />
+
+            <InsightCard
+              title="Active Pipeline"
+              value={formatCurrency(
+                revenueForecast.pipeline_value
+              )}
+              description="Potential active pipeline"
+            />
+
+            <InsightCard
+              title="Weighted Forecast"
+              value={formatCurrency(
+                revenueForecast.forecast_value
+              )}
+              description="Probability-weighted pipeline"
+            />
           </div>
+
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            <div className="rounded-xl bg-gray-50 p-4"><p className="text-xs text-gray-500">Qualified · 20%</p><p className="mt-1 font-bold text-gray-900">{formatCurrency(revenueForecast.components?.qualified)}</p></div>
-            <div className="rounded-xl bg-gray-50 p-4"><p className="text-xs text-gray-500">Interested · 40%</p><p className="mt-1 font-bold text-gray-900">{formatCurrency(revenueForecast.components?.interested)}</p></div>
-            <div className="rounded-xl bg-gray-50 p-4"><p className="text-xs text-gray-500">Negotiation · 70%</p><p className="mt-1 font-bold text-gray-900">{formatCurrency(revenueForecast.components?.negotiation)}</p></div>
+            <div className="rounded-xl bg-gray-50 p-4">
+              <p className="text-xs text-gray-500">
+                Qualified · 20%
+              </p>
+
+              <p className="mt-1 font-bold text-gray-900">
+                {formatCurrency(
+                  revenueForecast.components?.qualified
+                )}
+              </p>
+            </div>
+
+            <div className="rounded-xl bg-gray-50 p-4">
+              <p className="text-xs text-gray-500">
+                Interested · 40%
+              </p>
+
+              <p className="mt-1 font-bold text-gray-900">
+                {formatCurrency(
+                  revenueForecast.components?.interested
+                )}
+              </p>
+            </div>
+
+            <div className="rounded-xl bg-gray-50 p-4">
+              <p className="text-xs text-gray-500">
+                Negotiation · 70%
+              </p>
+
+              <p className="mt-1 font-bold text-gray-900">
+                {formatCurrency(
+                  revenueForecast.components?.negotiation
+                )}
+              </p>
+            </div>
           </div>
         </section>
 
         {/* STEP 40 - SALES PRODUCTIVITY */}
         <section className="mb-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
           <div className="mb-4">
-            <h2 className="text-lg font-bold text-gray-900">Sales Productivity</h2>
-            <p className="mt-1 text-sm text-gray-500">Overall CRM sales performance.</p>
+            <h2 className="text-lg font-bold text-gray-900">
+              Sales Productivity
+            </h2>
+
+            <p className="mt-1 text-sm text-gray-500">
+              Overall CRM sales performance.
+            </p>
           </div>
+
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-            <InsightCard title="Total Leads" value={salesProductivity.total_leads} description="All CRM leads" />
-            <InsightCard title="Active" value={salesProductivity.active_leads} description="Open opportunities" />
-            <InsightCard title="Converted" value={salesProductivity.converted_leads} description="Closed deals" />
-            <InsightCard title="Lost" value={salesProductivity.lost_leads} description="Lost opportunities" />
-            <InsightCard title="Conversion Rate" value={`${salesProductivity.conversion_rate}%`} description="Overall conversion" />
+            <InsightCard
+              title="Total Leads"
+              value={salesProductivity.total_leads}
+              description="All CRM leads"
+            />
+
+            <InsightCard
+              title="Active"
+              value={salesProductivity.active_leads}
+              description="Open opportunities"
+            />
+
+            <InsightCard
+              title="Converted"
+              value={salesProductivity.converted_leads}
+              description="Closed deals"
+            />
+
+            <InsightCard
+              title="Lost"
+              value={salesProductivity.lost_leads}
+              description="Lost opportunities"
+            />
+
+            <InsightCard
+              title="Conversion Rate"
+              value={`${salesProductivity.conversion_rate}%`}
+              description="Overall conversion"
+            />
           </div>
         </section>
 
         {/* STEP 41 - ANALYTICS DETAIL */}
         <section className="mb-6 grid gap-6 lg:grid-cols-2">
           <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-            <div className="mb-4"><h2 className="text-lg font-bold text-gray-900">Revenue & Conversion Trend</h2><p className="mt-1 text-sm text-gray-500">Daily lead, conversion and revenue movement.</p></div>
+            <div className="mb-4">
+              <h2 className="text-lg font-bold text-gray-900">
+                Revenue & Conversion Trend
+              </h2>
+
+              <p className="mt-1 text-sm text-gray-500">
+                Daily lead, conversion and revenue movement.
+              </p>
+            </div>
+
             {revenueTrend.length === 0 ? (
-              <div className="rounded-xl bg-gray-50 p-6 text-center text-sm text-gray-500">No trend data available.</div>
+              <div className="rounded-xl bg-gray-50 p-6 text-center text-sm text-gray-500">
+                No trend data available.
+              </div>
             ) : (
               <div className="space-y-3">
                 {revenueTrend.slice(-7).map((item) => {
                   const revenue = Number(item.revenue || 0)
-                  const width = Math.max((revenue / maxRevenueTrendValue) * 100, revenue > 0 ? 4 : 0)
+
+                  const width = Math.max(
+                    (revenue / maxRevenueTrendValue) * 100,
+                    revenue > 0 ? 4 : 0
+                  )
+
                   return (
                     <div key={item.date}>
                       <div className="mb-1 flex items-center justify-between text-xs">
-                        <span className="font-semibold text-gray-700">{formatDate(item.date)}</span>
-                        <span className="text-gray-500">{item.leads || 0} leads · {item.converted || 0} converted · {formatCurrency(revenue)}</span>
+                        <span className="font-semibold text-gray-700">
+                          {formatDate(item.date)}
+                        </span>
+
+                        <span className="text-gray-500">
+                          {item.leads || 0} leads ·{" "}
+                          {item.converted || 0} converted ·{" "}
+                          {formatCurrency(revenue)}
+                        </span>
                       </div>
-                      <div className="h-2 overflow-hidden rounded-full bg-gray-100"><div className="h-full rounded-full bg-gray-700" style={{ width: `${width}%` }} /></div>
+
+                      <div className="h-2 overflow-hidden rounded-full bg-gray-100">
+                        <div
+                          className="h-full rounded-full bg-gray-700"
+                          style={{
+                            width: `${width}%`,
+                          }}
+                        />
+                      </div>
                     </div>
                   )
                 })}
@@ -1377,18 +1810,59 @@ function Dashboard() {
           </div>
 
           <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-            <div className="mb-4"><h2 className="text-lg font-bold text-gray-900">Conversion Funnel</h2><p className="mt-1 text-sm text-gray-500">Lead movement through the sales stages.</p></div>
+            <div className="mb-4">
+              <h2 className="text-lg font-bold text-gray-900">
+                Conversion Funnel
+              </h2>
+
+              <p className="mt-1 text-sm text-gray-500">
+                Lead movement through the sales stages.
+              </p>
+            </div>
+
             {conversionFunnel.length === 0 ? (
-              <div className="rounded-xl bg-gray-50 p-6 text-center text-sm text-gray-500">No funnel data available.</div>
+              <div className="rounded-xl bg-gray-50 p-6 text-center text-sm text-gray-500">
+                No funnel data available.
+              </div>
             ) : (
               <div className="space-y-3">
                 {conversionFunnel.map((item) => {
                   const count = Number(item.count || 0)
-                  const width = Math.max((count / maxFunnelCount) * 100, count > 0 ? 4 : 0)
+
+                  const width = Math.max(
+                    (count / maxFunnelCount) * 100,
+                    count > 0 ? 4 : 0
+                  )
+
                   return (
-                    <button key={item.stage} type="button" onClick={() => setStatus(item.stage)} className="block w-full text-left">
-                      <div className="mb-1 flex items-center justify-between text-xs"><span className="font-semibold text-gray-700">{formatStatus(item.stage)}</span><span className="text-gray-500">{count} · {Number(item.overall_percentage || 0)}%</span></div>
-                      <div className="h-2 overflow-hidden rounded-full bg-gray-100"><div className="h-full rounded-full bg-gray-700" style={{ width: `${width}%` }} /></div>
+                    <button
+                      key={item.stage}
+                      type="button"
+                      onClick={() => setStatus(item.stage)}
+                      className="block w-full text-left"
+                    >
+                      <div className="mb-1 flex items-center justify-between text-xs">
+                        <span className="font-semibold text-gray-700">
+                          {formatStatus(item.stage)}
+                        </span>
+
+                        <span className="text-gray-500">
+                          {count} ·{" "}
+                          {Number(
+                            item.overall_percentage || 0
+                          )}
+                          %
+                        </span>
+                      </div>
+
+                      <div className="h-2 overflow-hidden rounded-full bg-gray-100">
+                        <div
+                          className="h-full rounded-full bg-gray-700"
+                          style={{
+                            width: `${width}%`,
+                          }}
+                        />
+                      </div>
                     </button>
                   )
                 })}
@@ -1400,20 +1874,67 @@ function Dashboard() {
         {/* STEP 42 - LEAD AGING & SMART ALERTS */}
         <section className="mb-6 grid gap-6 lg:grid-cols-2">
           <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-            <div className="mb-4"><h2 className="text-lg font-bold text-gray-900">Lead Aging</h2><p className="mt-1 text-sm text-gray-500">Identify leads that have not been updated recently.</p></div>
-            <div className="grid grid-cols-2 gap-3">
-              <InsightCard title="Fresh" value={leadAging.fresh} description="0–2 days" />
-              <InsightCard title="Attention" value={leadAging.attention} description="3–5 days" />
-              <InsightCard title="Stale" value={leadAging.stale} description="6–7 days" />
-              <InsightCard title="Critical" value={leadAging.critical} description="8+ days" />
+            <div className="mb-4">
+              <h2 className="text-lg font-bold text-gray-900">
+                Lead Aging
+              </h2>
+
+              <p className="mt-1 text-sm text-gray-500">
+                Identify leads that have not been updated recently.
+              </p>
             </div>
-            <p className="mt-4 text-xs text-gray-500">{totalAgingLeads} active leads classified by age.</p>
+
+            <div className="grid grid-cols-2 gap-3">
+              <InsightCard
+                title="Fresh"
+                value={leadAging.fresh}
+                description="0–2 days"
+              />
+
+              <InsightCard
+                title="Attention"
+                value={leadAging.attention}
+                description="3–5 days"
+              />
+
+              <InsightCard
+                title="Stale"
+                value={leadAging.stale}
+                description="6–7 days"
+              />
+
+              <InsightCard
+                title="Critical"
+                value={leadAging.critical}
+                description="8+ days"
+              />
+            </div>
+
+            <p className="mt-4 text-xs text-gray-500">
+              {totalAgingLeads} active leads classified by age.
+            </p>
+
             {staleLeads.length > 0 && (
               <div className="mt-4 space-y-2">
                 {staleLeads.slice(0, 5).map((lead) => (
-                  <Link key={lead.id} to={`/leads/${lead.id}`} className="flex items-center justify-between rounded-lg border border-gray-100 p-3 hover:bg-gray-50">
-                    <div><p className="text-sm font-semibold text-gray-800">{lead.name}</p><p className="text-xs text-gray-500">{lead.status} · Score {lead.score}</p></div>
-                    <span className="text-xs font-bold text-gray-600">{lead.age_days}d</span>
+                  <Link
+                    key={lead.id}
+                    to={`/leads/${lead.id}`}
+                    className="flex items-center justify-between rounded-lg border border-gray-100 p-3 hover:bg-gray-50"
+                  >
+                    <div>
+                      <p className="text-sm font-semibold text-gray-800">
+                        {lead.name}
+                      </p>
+
+                      <p className="text-xs text-gray-500">
+                        {lead.status} · Score {lead.score}
+                      </p>
+                    </div>
+
+                    <span className="text-xs font-bold text-gray-600">
+                      {lead.age_days}d
+                    </span>
                   </Link>
                 ))}
               </div>
@@ -1421,14 +1942,43 @@ function Dashboard() {
           </div>
 
           <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-            <div className="mb-4"><h2 className="text-lg font-bold text-gray-900">Smart Sales Alerts</h2><p className="mt-1 text-sm text-gray-500">Signals that may require sales attention.</p></div>
+            <div className="mb-4">
+              <h2 className="text-lg font-bold text-gray-900">
+                Smart Sales Alerts
+              </h2>
+
+              <p className="mt-1 text-sm text-gray-500">
+                Signals that may require sales attention.
+              </p>
+            </div>
+
             {salesAlerts.length === 0 ? (
-              <div className="rounded-xl bg-gray-50 p-6 text-center text-sm text-gray-500">No active sales alerts.</div>
+              <div className="rounded-xl bg-gray-50 p-6 text-center text-sm text-gray-500">
+                No active sales alerts.
+              </div>
             ) : (
               <div className="space-y-3">
                 {salesAlerts.map((alert, index) => (
-                  <div key={`${alert.type || "alert"}-${index}`} className="rounded-xl border border-gray-200 p-4">
-                    <div className="flex items-start gap-3"><AlertCircle size={18} className="mt-0.5 text-gray-600" /><div><p className="font-semibold text-gray-900">{alert.title}</p><p className="mt-1 text-sm text-gray-500">{alert.description}</p></div></div>
+                  <div
+                    key={`${alert.type || "alert"}-${index}`}
+                    className="rounded-xl border border-gray-200 p-4"
+                  >
+                    <div className="flex items-start gap-3">
+                      <AlertCircle
+                        size={18}
+                        className="mt-0.5 text-gray-600"
+                      />
+
+                      <div>
+                        <p className="font-semibold text-gray-900">
+                          {alert.title}
+                        </p>
+
+                        <p className="mt-1 text-sm text-gray-500">
+                          {alert.description}
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1462,7 +2012,6 @@ function Dashboard() {
               {pipelineStats.total} total leads
             </div>
           </div>
-
 
           {/* PIPELINE STAGES */}
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -1570,7 +2119,6 @@ function Dashboard() {
               )
             })}
 
-
             {/* LOST */}
             <button
               type="button"
@@ -1658,7 +2206,6 @@ function Dashboard() {
             </button>
           </div>
 
-
           {status !== "ALL" && (
             <div className="mt-4 flex items-center justify-between rounded-xl bg-gray-50 px-4 py-3">
               <p className="text-sm text-gray-600">
@@ -1679,7 +2226,6 @@ function Dashboard() {
             </div>
           )}
         </section>
-
 
         {/* SALES INTELLIGENCE */}
         <section className="mb-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
@@ -1729,7 +2275,6 @@ function Dashboard() {
           </div>
         </section>
 
-
         {/* SOURCE ANALYTICS */}
         <section className="mb-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
           <div className="mb-4">
@@ -1759,14 +2304,13 @@ function Dashboard() {
                   item.label ||
                   "Unknown"
 
-                const count =
-                  Number(
-                    item.count ??
-                      item.total ??
-                      item.leads ??
-                      item.value ??
-                      0
-                  )
+                const count = Number(
+                  item.count ??
+                    item.total ??
+                    item.leads ??
+                    item.value ??
+                    0
+                )
 
                 return (
                   <div
@@ -1790,7 +2334,6 @@ function Dashboard() {
             </div>
           )}
         </section>
-
 
         {/* FOLLOW-UP MANAGEMENT */}
         <section className="mb-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
@@ -1894,7 +2437,6 @@ function Dashboard() {
             </div>
           )}
         </section>
-
 
         {/* PRIORITY SALES QUEUE */}
         <section className="mb-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
@@ -2010,7 +2552,6 @@ function Dashboard() {
           )}
         </section>
 
-
         {/* LEAD MANAGEMENT */}
         <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
           <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -2032,7 +2573,6 @@ function Dashboard() {
               of {leads.length}
             </div>
           </div>
-
 
           {/* FILTERS */}
           <div className="mb-5 rounded-xl border border-gray-200 bg-gray-50 p-4">
@@ -2063,9 +2603,7 @@ function Dashboard() {
               )}
             </div>
 
-
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-
               {/* SEARCH */}
               <div className="relative xl:col-span-2">
                 <Search
@@ -2084,7 +2622,6 @@ function Dashboard() {
                 />
               </div>
 
-
               {/* STATUS */}
               <select
                 value={status}
@@ -2099,7 +2636,6 @@ function Dashboard() {
                   </option>
                 ))}
               </select>
-
 
               {/* TEMPERATURE */}
               <select
@@ -2126,7 +2662,6 @@ function Dashboard() {
                 </option>
               </select>
 
-
               {/* SOURCE */}
               <select
                 value={source}
@@ -2145,7 +2680,6 @@ function Dashboard() {
                   </option>
                 ))}
               </select>
-
 
               {/* SCORE */}
               <select
@@ -2171,7 +2705,6 @@ function Dashboard() {
                   Score: 80+
                 </option>
               </select>
-
 
               {/* FOLLOW UP */}
               <select
@@ -2202,7 +2735,6 @@ function Dashboard() {
                 </option>
               </select>
 
-
               {/* SORT */}
               <select
                 value={sortBy}
@@ -2225,7 +2757,6 @@ function Dashboard() {
               </select>
             </div>
           </div>
-
 
           {/* LEAD TABLE */}
           {loading ? (
@@ -2336,20 +2867,17 @@ function Dashboard() {
                           </div>
                         </td>
 
-
                         <td className="px-4 py-4">
                           <span className="inline-flex rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-700">
                             {formatStatus(lead.status)}
                           </span>
                         </td>
 
-
                         <td className="px-4 py-4">
                           <TemperatureBadge
                             temperature={lead.temperature}
                           />
                         </td>
-
 
                         <td className="px-4 py-4">
                           <div className="flex items-center gap-2">
@@ -2363,13 +2891,11 @@ function Dashboard() {
                           </div>
                         </td>
 
-
                         <td className="px-4 py-4">
                           <span className="text-sm text-gray-600">
                             {lead.source || "—"}
                           </span>
                         </td>
-
 
                         <td className="px-4 py-4">
                           {followUp ? (
@@ -2400,7 +2926,6 @@ function Dashboard() {
                           )}
                         </td>
 
-
                         <td className="px-4 py-4">
                           <span className="text-sm text-gray-600">
                             {formatDate(
@@ -2408,7 +2933,6 @@ function Dashboard() {
                             )}
                           </span>
                         </td>
-
 
                         <td className="px-4 py-4 text-right">
                           <Link
@@ -2427,11 +2951,9 @@ function Dashboard() {
             </div>
           )}
         </section>
-
       </div>
     </div>
   )
 }
-
 
 export default Dashboard
