@@ -35,6 +35,7 @@ class FollowUp(Base):
         String(30),
         nullable=False,
         default="PENDING",
+        index=True,
     )
 
     action: Mapped[str] = mapped_column(
@@ -47,8 +48,23 @@ class FollowUp(Base):
         nullable=True,
     )
 
+    notes: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         default=datetime.utcnow,
         nullable=False,
+    )
+
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        nullable=True,
+    )
+
+    cancelled_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        nullable=True,
     )

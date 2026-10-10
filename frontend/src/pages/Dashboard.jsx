@@ -33,6 +33,9 @@ import {
   getRevenueForecast,
   getSalesProductivity,
   getLeadFilterOptions,
+  completeFollowUp,
+  rescheduleFollowUp,
+  cancelFollowUp,
 } from "../services/api"
 
 
@@ -157,17 +160,10 @@ function getFollowUpForLead(lead, followUps) {
 
   const leadId = Number(lead.id)
 
-  const matching = followUps.filter(
-    (followUp) => Number(followUp.lead_id) === leadId
-  )
-
-  if (!matching.length) {
-    return null
-  }
-
-  const pending = matching
+  const pending = followUps
     .filter(
       (followUp) =>
+        Number(followUp.lead_id) === leadId &&
         String(followUp.status || "").toUpperCase() === "PENDING"
     )
     .sort((a, b) => {
@@ -177,7 +173,7 @@ function getFollowUpForLead(lead, followUps) {
       return dateA - dateB
     })
 
-  return pending[0] || matching[0]
+  return pending[0] || null
 }
 
 
@@ -385,6 +381,83 @@ function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [analyticsLoading, setAnalyticsLoading] = useState(false)
   const [followUpsLoading, setFollowUpsLoading] = useState(false)
+  const [followUpActionLoading, setFollowUpActionLoading] = useState(null)
+
+  async function handleCompleteFollowUp(followUp) {
+    if (!followUp?.id) return
+
+    try {
+      setFollowUpActionLoading(`complete-${followUp.id}`)
+      await completeFollowUp(followUp.id)
+      await loadDashboard()
+    } catch (error) {
+      console.error("Failed to complete follow-up:", error)
+      window.alert(
+        error?.response?.data?.detail || "Failed to complete follow-up."
+      )
+    } finally {
+      setFollowUpActionLoading(null)
+    }
+  }
+
+  async function handleRescheduleFollowUp(followUp) {
+    if (!followUp?.id) return
+
+    const currentDate = followUp.scheduled_at
+      ? new Date(followUp.scheduled_at).toISOString().slice(0, 16)
+      : ""
+
+    const newDate = window.prompt(
+      "Enter new date and time (YYYY-MM-DDTHH:MM):",
+      currentDate
+    )
+
+    if (!newDate) return
+
+    if (Number.isNaN(new Date(newDate).getTime())) {
+      window.alert("Please enter a valid date and time.")
+      return
+    }
+
+    const notes = window.prompt(
+      "Add a note for this reschedule (optional):",
+      followUp.notes || ""
+    )
+
+    try {
+      setFollowUpActionLoading(`reschedule-${followUp.id}`)
+      await rescheduleFollowUp(followUp.id, newDate, notes || null)
+      await loadDashboard()
+    } catch (error) {
+      console.error("Failed to reschedule follow-up:", error)
+      window.alert(
+        error?.response?.data?.detail || "Failed to reschedule follow-up."
+      )
+    } finally {
+      setFollowUpActionLoading(null)
+    }
+  }
+
+  async function handleCancelFollowUp(followUp) {
+    if (!followUp?.id) return
+
+    if (!window.confirm("Are you sure you want to cancel this follow-up?")) {
+      return
+    }
+
+    try {
+      setFollowUpActionLoading(`cancel-${followUp.id}`)
+      await cancelFollowUp(followUp.id)
+      await loadDashboard()
+    } catch (error) {
+      console.error("Failed to cancel follow-up:", error)
+      window.alert(
+        error?.response?.data?.detail || "Failed to cancel follow-up."
+      )
+    } finally {
+      setFollowUpActionLoading(null)
+    }
+  }
 
   async function loadDashboard() {
     try {
@@ -1799,14 +1872,19 @@ function Dashboard() {
               <h2 className="text-lg font-bold text-gray-900">
                 Follow-up Management
               </h2>
-
               <p className="text-sm text-gray-500">
-                Leads that require sales follow-up.
+                Complete, reschedule or cancel pending sales follow-ups.
               </p>
             </div>
 
             <span className="text-sm font-semibold text-gray-600">
-              {followUps.length} follow-ups
+              {
+                followUps.filter(
+                  (followUp) =>
+                    String(followUp.status || "").toUpperCase() === "PENDING"
+                ).length
+              }{" "}
+              pending follow-ups
             </span>
           </div>
 
@@ -1814,83 +1892,124 @@ function Dashboard() {
             <div className="py-8 text-center text-sm text-gray-500">
               Loading follow-ups...
             </div>
-          ) : followUps.length === 0 ? (
+          ) : !followUps.some(
+              (followUp) =>
+                String(followUp.status || "").toUpperCase() === "PENDING"
+            ) ? (
             <div className="rounded-xl bg-gray-50 p-6 text-center text-sm text-gray-500">
-              No follow-ups available.
+              No pending follow-ups available.
             </div>
           ) : (
             <div className="space-y-3">
-              {followUps.slice(0, 5).map((followUp) => {
-                const lead = leads.find(
-                  (item) =>
-                    Number(item.id) ===
-                    Number(followUp.lead_id)
+              {followUps
+                .filter(
+                  (followUp) =>
+                    String(followUp.status || "").toUpperCase() === "PENDING"
                 )
+                .sort(
+                  (a, b) =>
+                    new Date(a.scheduled_at || 0).getTime() -
+                    new Date(b.scheduled_at || 0).getTime()
+                )
+                .slice(0, 5)
+                .map((followUp) => {
+                  const lead = leads.find(
+                    (item) => Number(item.id) === Number(followUp.lead_id)
+                  )
+                  const timing = getFollowUpTiming(followUp)
 
-                const timing =
-                  getFollowUpTiming(followUp)
+                  return (
+                    <div
+                      key={followUp.id}
+                      className="flex flex-col gap-3 rounded-xl border border-gray-200 p-4"
+                    >
+                      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                        <div className="flex items-start gap-3">
+                          <div className="rounded-lg bg-gray-100 p-2">
+                            <CalendarClock size={17} className="text-gray-700" />
+                          </div>
 
-                return (
-                  <div
-                    key={followUp.id}
-                    className="flex flex-col gap-3 rounded-xl border border-gray-200 p-4 md:flex-row md:items-center md:justify-between"
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="rounded-lg bg-gray-100 p-2">
-                        <CalendarClock
-                          size={17}
-                          className="text-gray-700"
-                        />
-                      </div>
-
-                      <div>
-                        <p className="font-semibold text-gray-900">
-                          {lead?.name ||
-                            `Lead #${followUp.lead_id}`}
-                        </p>
-
-                        <p className="mt-1 text-sm text-gray-600">
-                          {followUp.action ||
-                            followUp.reason ||
-                            "Follow up with lead"}
-                        </p>
-
-                        {followUp.scheduled_at && (
-                          <p className="mt-1 text-xs text-gray-500">
-                            {formatDate(
-                              followUp.scheduled_at
+                          <div>
+                            <p className="font-semibold text-gray-900">
+                              {lead?.name || `Lead #${followUp.lead_id}`}
+                            </p>
+                            <p className="mt-1 text-sm text-gray-600">
+                              {followUp.action ||
+                                followUp.reason ||
+                                "Follow up with lead"}
+                            </p>
+                            {followUp.scheduled_at && (
+                              <p className="mt-1 text-xs text-gray-500">
+                                Scheduled: {formatDate(followUp.scheduled_at)}
+                              </p>
                             )}
-                          </p>
-                        )}
+                            {followUp.notes && (
+                              <p className="mt-1 text-xs text-gray-500">
+                                Note: {followUp.notes}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          {timing === "DUE" && (
+                            <span className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-bold text-red-700">
+                              DUE
+                            </span>
+                          )}
+                          {timing === "UPCOMING" && (
+                            <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700">
+                              UPCOMING
+                            </span>
+                          )}
+                          {lead && (
+                            <Link
+                              to={`/leads/${lead.id}`}
+                              className="inline-flex items-center gap-1 rounded-lg bg-gray-900 px-3 py-2 text-xs font-semibold text-white hover:bg-gray-800"
+                            >
+                              Open <ArrowRight size={13} />
+                            </Link>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2 border-t border-gray-100 pt-3">
+                        <button
+                          type="button"
+                          onClick={() => handleCompleteFollowUp(followUp)}
+                          disabled={followUpActionLoading !== null}
+                          className="rounded-lg bg-gray-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {followUpActionLoading === `complete-${followUp.id}`
+                            ? "Completing..."
+                            : "Complete"}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleRescheduleFollowUp(followUp)}
+                          disabled={followUpActionLoading !== null}
+                          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {followUpActionLoading === `reschedule-${followUp.id}`
+                            ? "Saving..."
+                            : "Reschedule"}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleCancelFollowUp(followUp)}
+                          disabled={followUpActionLoading !== null}
+                          className="rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {followUpActionLoading === `cancel-${followUp.id}`
+                            ? "Cancelling..."
+                            : "Cancel"}
+                        </button>
                       </div>
                     </div>
-
-                    <div className="flex items-center gap-2">
-                      {timing === "DUE" && (
-                        <span className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-bold text-red-700">
-                          DUE
-                        </span>
-                      )}
-
-                      {timing === "UPCOMING" && (
-                        <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700">
-                          UPCOMING
-                        </span>
-                      )}
-
-                      {lead && (
-                        <Link
-                          to={`/leads/${lead.id}`}
-                          className="inline-flex items-center gap-1 rounded-lg bg-gray-900 px-3 py-2 text-xs font-semibold text-white hover:bg-gray-800"
-                        >
-                          Open
-                          <ArrowRight size={13} />
-                        </Link>
-                      )}
-                    </div>
-                  </div>
-                )
-              })}
+                  )
+                })}
             </div>
           )}
         </section>
