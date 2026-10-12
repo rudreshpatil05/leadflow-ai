@@ -1,8 +1,12 @@
+
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
-from backend.app.db.database import engine
+from backend.app.db.database import Base, engine
+from backend.app.models.user import User
 
 # =========================================================
 # API ROUTERS
@@ -19,12 +23,29 @@ from backend.app.api.v1.auth import router as auth_router
 from backend.app.api.v1.duplicates import router as duplicates_router
 
 from backend.app.routers.sales_assistant import (
-    router as sales_assistant_router
+    router as sales_assistant_router,
 )
 
 from backend.app.routers.automation import (
-    router as automation_router
+    router as automation_router,
 )
+
+
+# =========================================================
+# APPLICATION LIFESPAN
+# =========================================================
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Initialize required database tables during application startup.
+    """
+    Base.metadata.create_all(
+        bind=engine,
+        tables=[User.__table__],
+    )
+
+    yield
 
 
 # =========================================================
@@ -38,6 +59,7 @@ app = FastAPI(
         "lead intelligence platform"
     ),
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 
@@ -67,13 +89,11 @@ app.include_router(
     prefix="/api/v1",
 )
 
-
 # Leads
 app.include_router(
     leads_router,
     prefix="/api/v1",
 )
-
 
 # Lead Activities
 app.include_router(
@@ -81,13 +101,11 @@ app.include_router(
     prefix="/api/v1",
 )
 
-
 # Follow-ups
 app.include_router(
     follow_ups_router,
     prefix="/api/v1",
 )
-
 
 # Next Best Actions
 app.include_router(
@@ -95,13 +113,11 @@ app.include_router(
     prefix="/api/v1",
 )
 
-
 # Sales Assistant
 app.include_router(
     sales_assistant_router,
     prefix="/api/v1",
 )
-
 
 # Legacy / existing automation router
 app.include_router(
@@ -109,13 +125,11 @@ app.include_router(
     prefix="/api/v1",
 )
 
-
 # Phase 7/8 automation router
 app.include_router(
     automation_v1_router,
     prefix="/api/v1",
 )
-
 
 # Production Control
 app.include_router(
@@ -123,13 +137,11 @@ app.include_router(
     prefix="/api/v1",
 )
 
-
 # Authentication
 app.include_router(
     auth_router,
     prefix="/api/v1",
 )
-
 
 # Duplicate Lead Management
 app.include_router(

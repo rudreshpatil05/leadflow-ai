@@ -1,4 +1,6 @@
-from datetime import datetime, timedelta
+﻿from datetime import datetime, timedelta
+
+from backend.app.utils.datetime_utils import utc_now
 
 from sqlalchemy.orm import Session
 
@@ -31,7 +33,7 @@ def create_follow_up(
     if existing_follow_up:
         return existing_follow_up
 
-    now = datetime.utcnow()
+    now = utc_now()
 
     if lead.temperature == "HOT":
 

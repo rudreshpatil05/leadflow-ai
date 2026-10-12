@@ -1,10 +1,11 @@
-from datetime import datetime
+﻿from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from backend.app.db.database import get_db
+from backend.app.utils.datetime_utils import utc_now
 from backend.app.models.follow_up import FollowUp
 from backend.app.models.lead import Lead
 from backend.app.models.lead_activity import LeadActivity
@@ -105,7 +106,7 @@ def complete_follow_up(
         )
 
     follow_up.status = "COMPLETED"
-    follow_up.completed_at = datetime.utcnow()
+    follow_up.completed_at = utc_now()
 
     activity = LeadActivity(
         lead_id=follow_up.lead_id,
@@ -234,7 +235,7 @@ def cancel_follow_up(
         return follow_up
 
     follow_up.status = "CANCELLED"
-    follow_up.cancelled_at = datetime.utcnow()
+    follow_up.cancelled_at = utc_now()
 
     activity = LeadActivity(
         lead_id=follow_up.lead_id,

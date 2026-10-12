@@ -2,6 +2,8 @@ import csv
 import io
 from datetime import datetime, date, timedelta
 
+from backend.app.utils.datetime_utils import utc_now
+
 from fastapi import (
     APIRouter,
     Depends,
@@ -148,7 +150,7 @@ def production_health(
             "status": "healthy",
             "database": "connected",
             "service": "LeadFlow AI",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": utc_now().isoformat(),
         }
 
     except Exception as exc:
@@ -157,7 +159,7 @@ def production_health(
             "database": "disconnected",
             "service": "LeadFlow AI",
             "error": str(exc),
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": utc_now().isoformat(),
         }
 
 
@@ -259,7 +261,7 @@ def export_leads(
 
     filename = (
         f"leadflow_leads_"
-        f"{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.csv"
+        f"{utc_now().strftime('%Y%m%d_%H%M%S')}.csv"
     )
 
     return StreamingResponse(
@@ -774,7 +776,7 @@ def generate_notifications(
 ):
     created = []
 
-    now = datetime.utcnow()
+    now = utc_now()
 
     # -----------------------------------------------------
     # HOT LEADS

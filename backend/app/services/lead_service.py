@@ -1,5 +1,7 @@
 from datetime import datetime
 
+from backend.app.utils.datetime_utils import utc_now
+
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
@@ -243,7 +245,7 @@ def update_lead(
 
         if not lead.conversion_date:
             update_data["conversion_date"] = (
-                datetime.utcnow()
+                utc_now()
             )
 
         # A converted lead cannot remain marked as lost.
@@ -271,7 +273,7 @@ def update_lead(
 
         if not lead.lost_date:
             update_data["lost_date"] = (
-                datetime.utcnow()
+                utc_now()
             )
 
         # A lost lead cannot remain marked as converted.
@@ -342,7 +344,7 @@ def update_lead(
             description=(
                 "Lead converted successfully."
                 + (
-                    f" Deal value: ₹{deal_value:,.0f}."
+                    f" Deal value: â‚¹{deal_value:,.0f}."
                     if deal_value is not None
                     else ""
                 )
