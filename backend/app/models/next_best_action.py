@@ -1,4 +1,6 @@
-from datetime import datetime
+﻿from datetime import datetime
+
+from backend.app.utils.datetime_utils import utc_now
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
@@ -49,6 +51,6 @@ class NextBestAction(Base):
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
-        default=datetime.utcnow,
+        default=utc_now,
         nullable=False,
     )

@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta
 
+from backend.app.utils.datetime_utils import utc_now
+
 from sqlalchemy.orm import Session
 
 from backend.app.models.lead import Lead
@@ -66,7 +68,7 @@ def process_hot_lead(
     db: Session,
     lead: Lead,
 ):
-    scheduled_at = datetime.utcnow() + timedelta(hours=1)
+    scheduled_at = utc_now() + timedelta(hours=1)
 
     follow_up = create_automated_follow_up(
         db=db,
@@ -91,7 +93,7 @@ def process_qualified_lead(
     db: Session,
     lead: Lead,
 ):
-    scheduled_at = datetime.utcnow() + timedelta(hours=4)
+    scheduled_at = utc_now() + timedelta(hours=4)
 
     follow_up = create_automated_follow_up(
         db=db,
@@ -116,7 +118,7 @@ def process_site_visit(
     db: Session,
     lead: Lead,
 ):
-    scheduled_at = datetime.utcnow() + timedelta(days=1)
+    scheduled_at = utc_now() + timedelta(days=1)
 
     follow_up = create_automated_follow_up(
         db=db,
@@ -140,7 +142,7 @@ def process_inactive_leads(
 ):
     from datetime import datetime
 
-    now = datetime.utcnow()
+    now = utc_now()
 
     leads = (
         db.query(Lead)

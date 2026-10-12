@@ -7,7 +7,7 @@ from backend.app.core.security import (
     hash_password,
     verify_password,
 )
-from backend.app.db.database import Base, engine, get_db
+from backend.app.db.database import  get_db
 from backend.app.models.user import User
 from backend.app.schemas.user import (
     LoginRequest,
@@ -22,12 +22,6 @@ router = APIRouter(
 )
 
 
-@router.on_event("startup")
-def create_user_table():
-    Base.metadata.create_all(
-        bind=engine,
-        tables=[User.__table__],
-    )
 
 
 @router.post("/register")

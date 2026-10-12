@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta
 
+from backend.app.utils.datetime_utils import utc_now
+
 from sqlalchemy.orm import Session
 
 from backend.app.models.automation_log import AutomationLog
@@ -68,7 +70,7 @@ class AutomationService:
         action: str = "PHONE",
         reason: str | None = None,
     ):
-        scheduled_at = datetime.utcnow() + timedelta(hours=delay_hours)
+        scheduled_at = utc_now() + timedelta(hours=delay_hours)
 
         follow_up = FollowUp(
             lead_id=lead.id,
@@ -91,7 +93,7 @@ class AutomationService:
         if action_type == "PRIORITY_ALERT":
             self.create_notification(
                 lead=lead,
-                title="🔥 Hot Lead Priority Alert",
+                title="ðŸ”¥ Hot Lead Priority Alert",
                 message=(
                     f"Lead {lead.name or lead.phone} is a HOT lead. "
                     "Immediate follow-up is recommended."
@@ -280,4 +282,4 @@ class AutomationService:
             )
 
             return existing is not None
-    
+

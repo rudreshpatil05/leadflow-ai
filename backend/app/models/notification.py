@@ -1,4 +1,6 @@
-from datetime import datetime
+﻿from datetime import datetime
+
+from backend.app.utils.datetime_utils import utc_now
 
 from sqlalchemy import Integer, String, Text, Boolean, DateTime
 from sqlalchemy.orm import Mapped, mapped_column
@@ -52,7 +54,7 @@ class Notification(Base):
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
-        default=datetime.utcnow,
+        default=utc_now,
         nullable=False,
         index=True,
     )

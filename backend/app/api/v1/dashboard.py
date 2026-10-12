@@ -3,6 +3,8 @@ from collections import defaultdict
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from datetime import datetime
+
+from backend.app.utils.datetime_utils import utc_now
 from backend.app.db.database import get_db
 from backend.app.models.lead import Lead
 from backend.app.models.follow_up import FollowUp
@@ -96,7 +98,7 @@ def get_source_analytics(db: Session = Depends(get_db)):
 def dashboard_follow_ups(
     db: Session = Depends(get_db),
 ):
-    now = datetime.utcnow()
+    now = utc_now()
 
     rows = (
         db.query(FollowUp, Lead)
@@ -437,7 +439,7 @@ def get_lead_aging(
         .all()
     )
 
-    now = datetime.utcnow()
+    now = utc_now()
 
     aging = {
         "fresh": 0,
@@ -520,7 +522,7 @@ def get_sales_alerts(
 
     leads = db.query(Lead).all()
 
-    now = datetime.utcnow()
+    now = utc_now()
 
     hot_count = 0
     stale_count = 0
@@ -618,7 +620,7 @@ def get_sales_alerts(
             "type": "REVENUE",
             "severity": "INFO",
             "title": f"{converted_count} deal(s) converted",
-            "description": "Converted deals have generated ₹"
+            "description": "Converted deals have generated â‚¹"
             + f"{total_revenue:,.0f}"
             + " in recorded revenue.",
             "count": converted_count,
@@ -726,7 +728,7 @@ def get_lead_intelligence(
 def get_follow_up_intelligence(
     db: Session = Depends(get_db),
 ):
-    now = datetime.utcnow()
+    now = utc_now()
 
     followups = (
         db.query(FollowUp, Lead)
