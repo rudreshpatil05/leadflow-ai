@@ -1,27 +1,17 @@
 import hashlib
 import hmac
-import os
 import secrets
 from datetime import datetime, timedelta, timezone
 
 import jwt
 
 
-JWT_SECRET_KEY = os.getenv(
-    "JWT_SECRET_KEY",
-    "development-only-secret-change-this",
-)
+from backend.app.core.config import settings
 
-JWT_ALGORITHM = os.getenv(
-    "JWT_ALGORITHM",
-    "HS256",
-)
-
-JWT_ACCESS_TOKEN_EXPIRE_MINUTES = int(
-    os.getenv(
-        "JWT_ACCESS_TOKEN_EXPIRE_MINUTES",
-        "1440",
-    )
+JWT_SECRET_KEY = settings.JWT_SECRET_KEY
+JWT_ALGORITHM = settings.JWT_ALGORITHM
+JWT_ACCESS_TOKEN_EXPIRE_MINUTES = (
+    settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES
 )
 
 
