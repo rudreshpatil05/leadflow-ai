@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+﻿from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from backend.app.core.auth import get_current_user, require_admin
@@ -41,17 +41,8 @@ def register_user(
             detail="A user with this email already exists.",
         )
 
-    role = str(data.role or "SALES").upper()
-
-    if role not in {
-        "ADMIN",
-        "MANAGER",
-        "SALES",
-    }:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid role.",
-        )
+    # Public registration must never grant elevated privileges.
+    role = "SALES"
 
     user = User(
         name=data.name.strip(),
