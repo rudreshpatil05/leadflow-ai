@@ -59,3 +59,18 @@ def test_production_rejects_empty_secret():
         return
 
     raise AssertionError("Production settings accepted an empty JWT secret.")
+def test_production_rejects_debug_mode():
+    try:
+        Settings(
+            DATABASE_URL="sqlite://",
+            GEMINI_API_KEY="test",
+            APP_ENV="production",
+            DEBUG=True,
+            JWT_SECRET_KEY="test-production-secret",
+        )
+    except ValidationError:
+        return
+
+    raise AssertionError(
+        "Production settings accepted DEBUG=True."
+    )

@@ -1,6 +1,6 @@
 ﻿
-from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -25,16 +25,28 @@ class Settings(BaseSettings):
     def validate_jwt_configuration(self):
         secret = self.JWT_SECRET_KEY.strip()
         environment = self.APP_ENV.strip().lower()
+        is_production = environment in {"production", "prod"}
 
+        # A JWT secret must always be configured.
         if not secret:
             raise ValueError("JWT_SECRET_KEY must not be empty.")
 
-        if secret == "development-only-secret-change-this":
-            if environment in {"production", "prod"}:
-                raise ValueError(
-                    "A secure JWT_SECRET_KEY is required in production."
-                )
+        # Never allow the known development secret in production.
+        if (
+            is_production
+            and secret == "development-only-secret-change-this"
+        ):
+            raise ValueError(
+                "A secure JWT_SECRET_KEY is required in production."
+            )
 
+        # Debug mode must be disabled in production.
+        if is_production and self.DEBUG:
+            raise ValueError(
+                "DEBUG must be false in production."
+            )
+
+        # Token expiration must be a positive number of minutes.
         if self.JWT_ACCESS_TOKEN_EXPIRE_MINUTES <= 0:
             raise ValueError(
                 "JWT_ACCESS_TOKEN_EXPIRE_MINUTES must be positive."
