@@ -1,4 +1,4 @@
-
+﻿
 from datetime import datetime
 
 import pytest
@@ -9,10 +9,8 @@ from sqlalchemy.pool import StaticPool
 
 from backend.app.main import app
 from backend.app.db.database import Base, get_db
+from backend.app.core.auth import create_access_token
 from backend.app.models.lead import Lead
-
-# Import the models needed by the application's registered routes and
-# their foreign-key relationships.
 from backend.app.models.follow_up import FollowUp
 from backend.app.models.user import User
 from backend.app.models.lead_activity import LeadActivity
@@ -21,7 +19,7 @@ from backend.app.models.audit_log import AuditLog
 
 @pytest.fixture
 def test_context():
-    """Use a fresh, isolated SQLite database for every test."""
+    """Use a fresh SQLite database and authenticated SALES user."""
     engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
@@ -50,6 +48,16 @@ def test_context():
         with TestClient(app) as client:
             db = TestingSessionLocal()
             try:
+                sales_user = User(
+                    name="Pytest Sales User",
+                    email="pytest-sales@example.com",
+                    password_hash="test-password-hash",
+                    role="SALES",
+                    is_active=True,
+                )
+                db.add(sales_user)
+                db.flush()
+
                 lead = Lead(
                     name="Pytest Test Lead",
                     phone="9000000001",
@@ -58,22 +66,39 @@ def test_context():
                     status="NEW",
                     temperature="HOT",
                     score=80,
+                    assigned_to=sales_user.id,
                 )
                 db.add(lead)
                 db.commit()
+                db.refresh(sales_user)
                 db.refresh(lead)
+
                 lead_id = lead.id
+                token = create_access_token(
+                    user_id=sales_user.id,
+                    email=sales_user.email,
+                    role=sales_user.role,
+                )
             finally:
                 db.close()
 
+            client.headers.update(
+                {"Authorization": f"Bearer {token}"}
+            )
+
             yield client, lead_id, TestingSessionLocal
+
     finally:
         app.dependency_overrides.pop(get_db, None)
         Base.metadata.drop_all(bind=engine)
         engine.dispose()
 
 
-def create_follow_up(client, lead_id, scheduled_at="2030-01-01T10:00:00"):
+def create_follow_up(
+    client,
+    lead_id,
+    scheduled_at="2030-01-01T10:00:00",
+):
     response = client.post(
         f"/api/v1/follow-ups/lead/{lead_id}",
         json={
@@ -98,7 +123,9 @@ def test_create_and_list_follow_up(test_context):
     assert created["action"] == "Call customer"
     assert created["notes"] == "Initial test note"
 
-    response = client.get(f"/api/v1/follow-ups/lead/{lead_id}")
+    response = client.get(
+        f"/api/v1/follow-ups/lead/{lead_id}"
+    )
 
     assert response.status_code == 200
     items = response.json()
@@ -218,8 +245,8 @@ def test_repeated_cancellation_is_idempotent(test_context):
     first = client.post(url)
     second = client.post(url)
 
-    assert first.status_code == 200
-    assert second.status_code == 200
+    assert first.status_code == 200, first.text
+    assert second.status_code == 200, second.text
     assert second.json()["status"] == "CANCELLED"
 
 
@@ -230,7 +257,7 @@ def test_cancelled_follow_up_cannot_be_completed(test_context):
     cancelled = client.post(
         f"/api/v1/follow-ups/{created['id']}/cancel"
     )
-    assert cancelled.status_code == 200
+    assert cancelled.status_code == 200, cancelled.text
 
     response = client.patch(
         f"/api/v1/follow-ups/{created['id']}/complete"
@@ -246,7 +273,7 @@ def test_completed_follow_up_cannot_be_cancelled(test_context):
     completed = client.patch(
         f"/api/v1/follow-ups/{created['id']}/complete"
     )
-    assert completed.status_code == 200
+    assert completed.status_code == 200, completed.text
 
     response = client.post(
         f"/api/v1/follow-ups/{created['id']}/cancel"
@@ -279,3 +306,51 @@ def test_missing_follow_up_returns_404(
     )
 
     assert response.status_code == 404
+
+
+def test_sales_user_cannot_access_another_sales_users_follow_up(
+    test_context,
+):
+    client, lead_id, SessionLocal = test_context
+
+    # Create a follow-up owned by the first SALES user's lead.
+    created = create_follow_up(client, lead_id)
+    follow_up_id = created["id"]
+
+    # Create a second SALES user and an unassigned-to-them lead.
+    with SessionLocal() as db:
+        second_user = User(
+            name="Second Pytest Sales User",
+            email="pytest-sales-2@example.com",
+            password_hash="test-password-hash",
+            role="SALES",
+            is_active=True,
+        )
+        db.add(second_user)
+        db.flush()
+
+        second_token = create_access_token(
+            user_id=second_user.id,
+            email=second_user.email,
+            role=second_user.role,
+        )
+        db.commit()
+
+    # Authenticate as the second SALES user.
+    client.headers.update(
+        {"Authorization": f"Bearer {second_token}"}
+    )
+
+    # Try to modify the first user's follow-up.
+    response = client.patch(
+        f"/api/v1/follow-ups/{follow_up_id}/complete"
+    )
+
+    assert response.status_code == 404, response.text
+
+    # Confirm the original follow-up remains unchanged.
+    with SessionLocal() as db:
+        original = db.get(FollowUp, follow_up_id)
+        assert original is not None
+        assert original.status == "PENDING"
+        assert original.completed_at is None
