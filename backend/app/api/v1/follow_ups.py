@@ -1,16 +1,20 @@
-﻿from datetime import datetime
+﻿
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from backend.app.core.auth import require_sales
+from backend.app.core.lead_access import get_accessible_lead
 from backend.app.db.database import get_db
-from backend.app.utils.datetime_utils import utc_now
 from backend.app.models.follow_up import FollowUp
 from backend.app.models.lead import Lead
 from backend.app.models.lead_activity import LeadActivity
-from backend.app.services.follow_up_service import create_follow_up
+from backend.app.models.user import User
 from backend.app.services.audit_service import AuditService
+from backend.app.services.follow_up_service import create_follow_up
+from backend.app.utils.datetime_utils import utc_now
 
 
 router = APIRouter(prefix="/follow-ups", tags=["Follow Ups"])
@@ -34,14 +38,9 @@ def create_manual_follow_up(
     lead_id: int,
     payload: ManualFollowUpCreate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_sales),
 ):
-    lead = db.query(Lead).filter(Lead.id == lead_id).first()
-
-    if lead is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Lead not found",
-        )
+    lead = get_accessible_lead(lead_id, db, current_user)
 
     follow_up = FollowUp(
         lead_id=lead_id,
@@ -79,6 +78,7 @@ def create_manual_follow_up(
 def complete_follow_up(
     follow_up_id: int,
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_sales),
 ):
     follow_up = (
         db.query(FollowUp)
@@ -91,6 +91,13 @@ def complete_follow_up(
             status_code=404,
             detail="Follow-up not found",
         )
+
+    # Verify access before any early return or database modification.
+    lead = get_accessible_lead(
+        follow_up.lead_id,
+        db,
+        current_user,
+    )
 
     if follow_up.status == "COMPLETED":
         return {
@@ -125,19 +132,10 @@ def complete_follow_up(
         description=f"Follow-up completed: {follow_up.action}",
     )
 
-    lead = (
-        db.query(Lead)
-        .filter(Lead.id == follow_up.lead_id)
-        .first()
+    next_follow_up = create_follow_up(
+        db=db,
+        lead=lead,
     )
-
-    next_follow_up = None
-
-    if lead is not None:
-        next_follow_up = create_follow_up(
-            db=db,
-            lead=lead,
-        )
 
     return {
         "completed_follow_up": follow_up,
@@ -150,6 +148,7 @@ def reschedule_follow_up(
     follow_up_id: int,
     payload: RescheduleFollowUpRequest,
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_sales),
 ):
     follow_up = (
         db.query(FollowUp)
@@ -162,6 +161,12 @@ def reschedule_follow_up(
             status_code=404,
             detail="Follow-up not found",
         )
+
+    get_accessible_lead(
+        follow_up.lead_id,
+        db,
+        current_user,
+    )
 
     if follow_up.status == "COMPLETED":
         raise HTTPException(
@@ -176,7 +181,6 @@ def reschedule_follow_up(
         )
 
     old_scheduled_at = follow_up.scheduled_at
-
     follow_up.scheduled_at = payload.scheduled_at
 
     if payload.notes is not None:
@@ -212,6 +216,7 @@ def reschedule_follow_up(
 def cancel_follow_up(
     follow_up_id: int,
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_sales),
 ):
     follow_up = (
         db.query(FollowUp)
@@ -224,6 +229,12 @@ def cancel_follow_up(
             status_code=404,
             detail="Follow-up not found",
         )
+
+    get_accessible_lead(
+        follow_up.lead_id,
+        db,
+        current_user,
+    )
 
     if follow_up.status == "COMPLETED":
         raise HTTPException(
@@ -261,18 +272,9 @@ def cancel_follow_up(
 def get_lead_follow_ups(
     lead_id: int,
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_sales),
 ):
-    lead = (
-        db.query(Lead)
-        .filter(Lead.id == lead_id)
-        .first()
-    )
-
-    if lead is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Lead not found",
-        )
+    get_accessible_lead(lead_id, db, current_user)
 
     return (
         db.query(FollowUp)
